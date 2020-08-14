@@ -17,40 +17,6 @@ import uuid
 ##################
 
 
-def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , uniqueName=False):
-  if uniqueName:
-    htmp = hashlib.md5("%s"%time.time()).hexdigest()
-  else:
-    htmp = "h_tmp"
-  
-  if binningIsExplicit:
-    h = ROOT.TH1D(htmp, htmp, len(binning)-1, array('d', binning))
-#    h.SetBins(len(binning), array('d', binning))
-  else:
-    if len(binning)==6:
-      h = ROOT.TH2D(htmp, htmp, *binning)
-    else:
-      h = ROOT.TH1D(htmp, htmp, *binning)
-  
-  c.Draw(var+">>%s"%htmp, weight+"*("+cutString+")", 'goff')
-  
-  if variableBinning[0]:
-    h.Sumw2()
-    h.Scale(variableBinning[1],"width")
-  
-  res = h.Clone()
-  h.Delete()
-  del h
-
-  if addOverFlowBin.lower() == "upper" or addOverFlowBin.lower() == "both":
-    nbins = res.GetNbinsX()
-#    print "Adding", res.GetBinContent(nbins + 1), res.GetBinError(nbins + 1)
-    res.SetBinContent(nbins , res.GetBinContent(nbins) + res.GetBinContent(nbins + 1))
-    res.SetBinError(nbins , sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
-  if addOverFlowBin.lower() == "lower" or addOverFlowBin.lower() == "both":
-    res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
-    res.SetBinError(1 , sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
-  return res
 
 
 
@@ -246,26 +212,7 @@ def makeLegend( data=None, mc_stack=None, sig_stack=None, leg_location=None , nB
 #                       joinPads=True,
 #                       func=None
 #                    ):
-#  c = ROOT.TCanvas(c1Name,c1Name,c1ww,c1wh)
-#
-#  pad1 = ROOT.TPad(p1Name, p1Name, *p1M)
-#  pad1.SetBottomMargin(0)  # joins upper and lower plot
-#  if p1Gridx: pad1.SetGridx()
-#  if p1Gridy: pad1.SetGridy()
-#
-#  # Lower ratio plot is pad2
-#  c.cd()  # returns to main canvas before defining pad2
-#  pad2 = ROOT.TPad(p2Name, p2Name, *p2M)
-#
-#  if joinPads: pad2.SetTopMargin(0)  # joins upper and lower plot
-#  pad2.SetBottomMargin(0.3)
-#  if p2Gridx: pad2.SetGridx()
-#  if p2Gridy: pad2.SetGridy()
-#  if func:
-#    func(pad1,pad2)
-#  pad1.Draw()
-#  pad2.Draw()
-#  return c, pad1, pad2
+
 
 #def drawCMSHeader( preliminary = "", lumi = 35.9, lxy = [0.16,0.915], rxy=[0.77,0.915], textR="%0.1f fb^{-1} (13 TeV)", cmsinside=True):
 #    isPaper = preliminary.lower() in ['paper','']

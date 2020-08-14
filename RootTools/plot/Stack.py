@@ -99,7 +99,8 @@ class Stack ( list ):
         """
             stack method:
             stackTypeList must be list of lists.
-            Applies func to all stackTypeList and returns the outputs in the same structure as the stackTypeList
+            Applies func to each element in stackTypeList and returns the outputs in the same structure as the stackTypeList
+            
         """
         ret = []
         for i,l in enumerate(stackTypeList):
@@ -108,7 +109,32 @@ class Stack ( list ):
                 ret[-1].append( func(s) )
         return ret
 
+    @staticmethod
+    def applyFuncToStackByIndex(stackTypeList, func = None):
+        """
+            stack method:
+            stackTypeList must be list of lists.
+            Applies func to each element in stackTypeList and returns the outputs in the same structure as the stackTypeList
+            func should be of the form:
+            func = lambda i,j, s: ....
+            where stackTypeList[i][j]=s
+ 
+        """
+        ret = []
+        for i,l in enumerate(stackTypeList):
+            ret.append([])
+            for j,s in enumerate(l):
+                ret[-1].append( func(i,j,s) )
+        return ret
 
+    #def getHistos(self, var, binning, cut=None, weight=None, name=None, title=None):
+    #    from PythonTools.ROOTHelpers import getHistoFromRDF
+    #    #                         
+    #    getHistoFromRDF(
+    #    return self.applyFunc( lambda x: getHistoFromRDF(x.rdf, *args, **kwargs) )
+
+
+    @staticmethod
     def flatten(stackTypeList):
         import itertools
         return list(itertools.chain(*stackTypeList))

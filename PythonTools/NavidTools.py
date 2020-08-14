@@ -6,6 +6,64 @@ Module with 'useful' and general (non-PyROOT) python functions and tricks
 
 import uuid
 import hashlib
+import os 
+import pickle
+
+
+class PickleDB():
+    """
+        little class to pickle and update dictionaries
+        results = PickleDB('results.pkl')
+        results.update(**{'param':123, 'histo':ROOT.TH1D()})
+        
+
+    """
+    def __init__(self, pkl_path): 
+        self.path     = os.path.expanduser(pkl_path)
+        self.dir      = os.path.dirname(self.path)
+        self.filename = os.path.basename(self.path)
+
+    @property
+    def db(self):
+        return self.read(create=True)
+
+    def write(self, path=None, db=None):
+        path = path if path else self.path
+        db   = db if not db == None  else getattr(self,'db',None)
+        if db == None:
+            print ("Database is missing... was asked to write %s"%db)
+            return
+        with open(path,'wb') as f:
+            pickle.dump(db,f)
+        
+
+    def exists(self):
+        isfile = os.path.isfile(self.path)
+        return isfile 
+
+    def read(self, create=False):
+        exists = self.exists()
+        if not exists:
+            if create:
+                if not os.path.isdir( self.dir ):
+                    print("making dir {self.dir}")
+                    os.makedirs(self.dir)
+                print(f"Creating File: {self.path}")
+                self.write( path=self.path, db={})
+            else:
+                print(f"Expected file at {self.path} but didnt find it")
+                return False
+        with open(self.path,'rb') as f:
+            db  = pickle.load(f)
+        return db
+
+    def update(self, **kwargs):
+        db = self.db
+        db.update(**kwargs)
+        self.write(db=db)
+        return self.db 
+
+
 
 
 def dict_func ( func , d):
@@ -17,7 +75,7 @@ def dict_func ( func , d):
     for k in d.keys():
         v = d.get(k)
         if type(v)==dict:
-            ret = dict_function( v , func)
+            ret = dict_func(func, v)
         else:
             ret = func(v)
         new_dict[k] = ret

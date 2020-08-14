@@ -275,6 +275,14 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
             self.__loadChain()
         return self._chain
 
+    # Handle loading of rdf -> load it when first used
+    @property
+    def rdf(self):
+        if not hasattr(self, "_rdf"):
+            logger.debug("First request of attribute 'rdf' for sample %s. Getting the RDataFrame from chain", self.name)
+            self._rdf = ROOT.RDataFrame(self.chain)
+        return self._rdf
+
     # "Private" method that loads the chain from self.files
     def __loadChain(self):
         ''' Load the TChain. Private.

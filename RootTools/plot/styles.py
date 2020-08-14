@@ -47,3 +47,24 @@ def fillStyle( color, lineColor = ROOT.kBlack, lineWidth = 1, errors = False):
         if errors: histo.drawOption+='E'
         return 
     return func
+
+
+def styler( **kwargs ):
+    """
+        kwargs can be things like lineColor or fillColor (i.e. histogram attribites like SetLineColor and SetFillColor etc)
+    """
+    def func( histo ):
+        for k,v in kwargs.items():
+            if isinstance(k,str):
+                #assume k is something like lineColor and use SetLineColor to style histo
+                k_ = f"Set{k[0].upper()+''.join(k[1:])}"
+                if hasattr(histo,k_):
+                    getattr(histo,k_)(v)
+                else:
+                    raise NotImplementedError(f"Don't know what to do with style arguments {(k,v)}, amongst {kwargs}....")
+                    
+            else:
+                #assume v is a function
+                raise NotImplementedError(f"Don't know what to do with style arguments {(k,v)}, amongst {kwargs}....")
+        return
+    return func

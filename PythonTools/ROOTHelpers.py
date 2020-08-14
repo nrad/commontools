@@ -12,10 +12,10 @@ from PythonTools.NavidTools import uniqueName, hashString, hashObj
 ###################################
 
 
-def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None):
+def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None):
   """
-          
-        From HEPHYPythonTools! author unknown.
+        From HEPHYPythonTools!
+        author unknown (probably Robert Schoefbeck)
   """
   hname_tmp = uniqueName("h_tmp")
 
@@ -27,8 +27,8 @@ def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binn
       h = ROOT.TH2D(hname_tmp, hname_tmp, *binning)
     else:
       h = ROOT.TH1D(hname_tmp, hname_tmp, *binning)
-
-  c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff')
+  nEventsArgs = (nEvents,0) if nEvents else () 
+  c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
 
   if variableBinning[0]:
     h.Sumw2()
@@ -47,6 +47,145 @@ def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binn
     res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
     res.SetBinError(1 , sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
   return res
+
+
+
+
+opt_dict = {"*":"x", "+":"plus", "/":"over", "-":"minus", "(":"op", ")":"cp", ".": "p", ":":"cln", ",":"com", " ":""}
+def defineVariableStringForRDF(v, prefix="defined_", opt_dict=opt_dict, ):
+    vname = v
+    redefined = False
+    for opt,optname in opt_dict.items():
+        if opt in v:
+            vname = vname.replace(opt, f"__{optname}__")
+            redefined = True
+    if redefined:
+        return f"{prefix}{vname}"
+
+
+def defineVariablesForRDF(rdf, variable_list, prefix="defined_", opt_dict=opt_dict, ):
+    new_vars_dict = {}
+    for v in variable_list:
+        redef = defineVariableStringForRDF(v)
+        if redef:
+            try:
+                #print(f"define new variable, {redef}, {v}")
+                rdf = rdf.Define(redef,v)
+            except TypeError as exp:
+                print ("Tried to Define Variable For RDF:", v, redef)
+                raise exp
+            new_vars_dict[v]=redef 
+        else:
+            new_vars_dict[v]=v
+    return rdf, new_vars_dict
+
+
+
+
+
+def getHistoFromRDF(rdf, var, binning, cut=None, weight=None, name=None, title=None): #, xtitle=None, ytitle=None):
+    """
+        Helper function to get histograms from RDataFrames
+        'var' can be either variable string or [xvar,yvar]
+             if there are formulas in the var (or weight), I will try to Define them for the RDF.
+        'cut' can be applied for better performance (especially if you have multiple histograms to make) 
+            apply Filter to RDF before passing it on to this function.
+    """
+    allvars = []
+
+    if cut:
+        try:
+            rdf = rdf.Filter(str(cut))
+        except Exception as exp:
+            print(f"FAILED TO FILTER RDF WITH THE FOLLOWING SELECITON: \n {cut}")
+            raise exp
+        #allvars.append(cut)
+    if weight:
+        allvars.append(str(weight))
+
+    if isinstance(var, (list,tuple)):
+        nHistoDimension = len(var)
+        var = tuple(str(x) for x in var)
+        histoFuncString = "Histo2D" ## Howabout dimensional Histos?
+        if nHistoDimension != 2:
+            raise NotImplementedError("O.K... only dimensions up to Histo2D are implemented... fix it!")
+        assert len(binning)==6, f"Binning doesn't match for Histo2D: {binning}"
+    else:
+        nHistoDimension = 1 
+        var = (str(var),)
+        histoFuncString = "Histo1D"
+        assert len(binning)==3, f"Binning doesn't match for Histo1D: {binning}"
+
+    allvars.extend(var) 
+    rdf, varsdict = defineVariablesForRDF(rdf, allvars)
+    newvars = tuple(new for old,new in varsdict.items() if old in var)
+
+
+    name = name if name else uniqueName("Hist")
+    title = title if title else name
+    #histo2d_args = ( (name,title) +binning ,) + tuple( var_.split(":") )
+    histo_args = ( (name,title) +binning ,) + newvars
+
+    if weight:
+        histo_args = histo_args + (varsdict[weight],)
+    try:
+        h = getattr(rdf, histoFuncString)(*histo_args)
+    except TypeError as exp:
+        print("FAILED MAKING RDF HISTOGRAM WITH ARGS: \n", histo_args)
+        raise exp
+    return h
+
+
+
+def getRDFHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
+    """
+    wrapper for getHistoFromRDF
+    Sample is expected to be a RootTools Sample
+    args = cut, weight
+    """
+    if not hasattr(sample, "combineWithSampleWeight"):
+        raise Exception(f"sample ({sample}) doesn't seem to be an instance of RootTools.Sample") 
+    cut = kwargs.get("cut",None)
+    weight = kwargs.get("weight",None)
+    cut = str(cut) if cut else cut
+    weight = str(weight) if weight else weight
+
+    kwargs['cut']    = sample.combineWithSampleSelection( cut )
+    kwargs["weight"] = sample.combineWithSampleWeight( weight )
+    histo = getHistoFromRDF(sample.rdf, *args, **kwargs)
+    histo.cut = kwargs['cut']
+    histo.weight = kwargs['weight']
+    return histo
+     
+def getHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
+    """
+    wrapper for getPlotFromChain
+    Sample is expected to be a RootTools Sample
+    args = cut, weight
+    """
+    if not hasattr(sample, "combineWithSampleWeight"):
+        raise Exception(f"sample ({sample}) doesn't seem to be an instance of RootTools.Sample") 
+    cut = kwargs.get("cutString",None)
+    weight = kwargs.get("weight",None)
+    cut    = str(cut)    if cut else cut
+    weight = str(weight) if weight else weight
+
+    kwargs['cutString']    = sample.combineWithSampleSelection( cut )
+    kwargs["weight"] = sample.combineWithSampleWeight( weight )
+    #if 'nFractEvents' in kwargs:
+    #    kwargs['nEvents'] = int(sample.chain.GetEntries()*kwargs['nFractEvents'])
+    #    kwargs["weight"] = f"({kwargs['weight']}*{kwargs['nFractEvents']})"
+    histo = getPlotFromChain(sample.chain, *args, **kwargs)
+    histo.cut = kwargs['cutString']
+    histo.weight = kwargs['weight']
+        
+
+    return histo
+     
+
+
+
+
 
 
 def getEList(chain, cut, eListName=None, resetEList=True, keepAsChainAttr=False):
@@ -107,6 +246,8 @@ def getObjFromFile(fname, hname):
   f.Close()
   return res
 
+
+#
 def th2Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
     """
         Returns a new histogram after applying func(xbin,ybin,bincontent) to each bin of hist.
@@ -310,6 +451,33 @@ def CanvasPartition(canv, nx, ny, lMargin=0.07, rMargin=0.05,
             pads.append(pad)
     return canv, pads
 
+def makeCanvasPads(    c1Name="canvas",  c1ww=800, c1wh=650,
+                       p1Name="pad1", p1M=(0.0, 0.4, 1, 1) , p1Gridx=False, p1Gridy=False,
+                       p2Name="pad2", p2M=(0.0, 0,1,0.4), p2Gridx=False, p2Gridy=False,
+                       joinPads=True,
+                       func=None
+                    ):
+  c = ROOT.TCanvas(c1Name,c1Name,c1ww,c1wh)
+
+  pad1 = ROOT.TPad(p1Name, p1Name, *p1M)
+  pad1.SetBottomMargin(0)  # joins upper and lower plot
+  if p1Gridx: pad1.SetGridx()
+  if p1Gridy: pad1.SetGridy()
+
+  # Lower ratio plot is pad2
+  c.cd()  # returns to main canvas before defining pad2
+  pad2 = ROOT.TPad(p2Name, p2Name, *p2M)
+
+  if joinPads: pad2.SetTopMargin(0)  # joins upper and lower plot
+  pad2.SetBottomMargin(0.3)
+  if p2Gridx: pad2.SetGridx()
+  if p2Gridy: pad2.SetGridy()
+  if func:
+    func(pad1,pad2)
+  pad1.Draw()
+  pad2.Draw()
+  return c, pad1, pad2
+
 
 def removeBranchesFromTree(chain, branchesToKeep=[]):
     nEvents = chain.GetEntries()
@@ -318,6 +486,221 @@ def removeBranchesFromTree(chain, branchesToKeep=[]):
         chain.SetBranchStatus(br,1)
     new = chain.CloneTree(-1)
     return new
+
+###
+
+
+
+
+
+
+    
+def adjustRatioStyle2(r, plot=None, ref=None, size_factor = 1):
+    print(r,plot,ref, size_factor)
+    r.GetXaxis().SetLabelSize(0.12  if not ref else size_factor*ref.GetXaxis().GetLabelSize() )
+    r.GetYaxis().SetLabelSize(0.12  if not ref else size_factor*ref.GetYaxis().GetLabelSize() )
+    r.GetXaxis().SetTitleSize(0.1   if not ref else size_factor*ref.GetXaxis().GetTitleSize() )
+    r.GetYaxis().SetTitleSize(0.1   if not ref else size_factor*ref.GetYaxis().GetTitleSize() )
+    r.GetXaxis().SetTitleOffset(1   if not ref else ref.GetXaxis().GetTitleOffset() )
+    r.GetYaxis().SetTitleOffset(0.5 if not ref else ref.GetYaxis().GetTitleOffset()/size_factor )
+    r.GetYaxis().SetNdivisions(5,4,2)
+    
+    if plot:
+        #r.GetYaxis().SetTitle("new/old   ")
+        r.GetXaxis().SetTitle( plot.xTitle )
+    elif ref:
+        r.GetXaxis().SetTitle( ref.GetXaxis().GetTitle() )
+
+def adjustHistAxis(h):
+    
+    for ax in [h.GetXaxis(), h.GetYaxis()]:
+        ax.SetLabelFont(43)
+        ax.SetTitleFont(43)
+        ax.SetLabelSize(26)
+        ax.SetTitleSize(22)
+    #h.GetXaxis().SetTitleOffset(3)
+    #h.GetYaxis().SetTitleOffset(1.5)
+
+    #if plot:
+    #    #r.GetYaxis().SetTitle("new/old   ")
+    #    r.GetXaxis().SetTitle( plot.xTitle )
+    #elif ref:
+    #    r.GetXaxis().SetTitle( ref.GetXaxis().GetTitle() )
+
+        
+        
+def createCanvasPads(cname="drawHistos", wtopx=200, wtopy=10, xwidth=500, ywidth=500, ratiowidth=200):
+    c1 = ROOT.TCanvas(str(uuid.uuid4()).replace('-','_'), cname,wtopx,wtopy, xwidth, ywidth)
+    y_border = ratiowidth/(ywidth+ratiowidth)
+    c1.Divide(1,2,0,0)
+    topPad = c1.cd(1)
+    topPad.SetBottomMargin(0)
+    topPad.SetLeftMargin(0.15)
+    topPad.SetTopMargin(0.07)
+    topPad.SetRightMargin(0.05)
+    topPad.SetPad(topPad.GetX1(), y_border, topPad.GetX2(), topPad.GetY2())
+    bottomPad = c1.cd(2)
+    bottomPad.SetTopMargin(0)
+    bottomPad.SetRightMargin(0.05)
+    bottomPad.SetLeftMargin(0.15)
+    #bottomPad.SetBottomMargin(0.3)
+    bottomPad.SetBottomMargin(ywidth/ratiowidth*0.16)
+    bottomPad.SetPad(bottomPad.GetX1(), bottomPad.GetY1(), bottomPad.GetX2(), y_border)
+    return c1, topPad, bottomPad
+
+def drawRatioPlot( topPadObjects, bottomPadObjects=None, widths={}, plot=None, doDraw=False):
+    """
+    
+    
+    """
+    ratio = True if bottomPadObjects else False
+    bottomPadObjects = bottomPadObjects if isinstance(bottomPadObjects, (list,tuple)) else [bottomPadObjects]
+    topPadObjects = topPadObjects if isinstance(topPadObjects, (list,tuple)) else [topPadObjects]
+    
+    y_title_offset = 2
+    default_widths = {'y_width':500, 'x_width':500, 'y_ratio_width':200}
+    default_widths.update( widths )
+    #y_border = default_widths['y_ratio_width']/float( default_widths['y_width'] )
+    #default_widths['y_width'] += default_widths['y_ratio_width']
+
+    if ratio is not None:
+        scaleFacRatioPad = default_widths['y_width']/float( default_widths['y_ratio_width'] )
+        default_widths['y_width'] += default_widths['y_ratio_width']
+        #y_border         = default_widths['y_ratio_width']/float( default_widths['y_width'] )
+
+    widths = default_widths
+    #c1 = ROOT.TCanvas(str(uuid.uuid4()).replace('-','_'), "drawHistos",200,10, default_widths['x_width'], default_widths['y_width'])
+    c1, topPad, bottomPad = createCanvasPads('canvname', xwidth=widths['x_width'], ywidth=widths['y_width'] , ratiowidth=widths['y_ratio_width'] )
+    #c1 = ROOT.TCanvas(str(uuid.uuid4()).replace('-','_'), "drawHistos", default_widths['x_width'], default_widths['y_width'])
+    #c1.Divide(1,2,0,0)
+    #topPad = c1.cd(1)
+    #topPad.SetBottomMargin(0)
+    #topPad.SetLeftMargin(0.15)
+    #topPad.SetTopMargin(0.07)
+    #topPad.SetRightMargin(0.05)
+    #topPad.SetPad(topPad.GetX1(), y_border, topPad.GetX2(), topPad.GetY2())
+    #bottomPad = c1.cd(2)
+    #bottomPad.SetTopMargin(0.005)
+    #bottomPad.SetRightMargin(0.05)
+    #bottomPad.SetLeftMargin(0.15)
+    #bottomPad.SetBottomMargin(scaleFacRatioPad*0.13)
+    #bottomPad.SetPad(bottomPad.GetX1(), bottomPad.GetY1(), bottomPad.GetX2(), y_border)
+
+    if plot:
+        topPad.SetLogy( plot.logY )
+    
+    c1.cd()
+    topPad.cd()
+    topRefHist = topPadObjects[0]
+    #topRefHist.Reset()
+    bottomRefHist = bottomPadObjects[0]
+    #bottomRefHist.Reset()
+    
+    
+    
+    adjustHistAxis(topRefHist)
+    topRefHist.GetYaxis().SetTitleOffset(y_title_offset)
+    topRefHist.GetYaxis().SetMaxDigits(4)
+    
+    dOpt = ""
+    for s in topPadObjects:
+        s.Draw(dOpt + getattr(s,"drawOption","") )
+        dOpt = "same"
+
+
+        
+    topPad.Update()
+    topPad.Draw()
+    c1.Update()
+    if ratio:
+        bottomPad.cd()
+       
+        bottomRefHist.Draw()
+        bottomPad.Update()
+        #adjustRatioStyle(bottomPadObjects[0], plot, topPadObjects[0], scaleFacRatioPad)
+        #adjustRatioStyle(1,2,3,4)
+        adjustHistAxis(bottomRefHist)
+        bottomRefHist.GetXaxis().SetTitle(plot.xTitle if plot else "")
+        
+        topRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the first axis label in Y 
+        bottomRefHist.GetYaxis().ChangeLabel(-1,-1,0.) # remove the last axis label in Y
+        bottomRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the last axis label in Y
+        
+        #bottomRefHist.GetYaxis().SetNdivisions( int(np.ceil(bottomRefHist.GetMaximum())) ,0,2, False)
+        #bottomRefHist.GetYaxis().SetNdivisions( 5 ,0,2, False)
+        
+        bottomRefHist.GetYaxis().SetLabelOffset(0.02)
+        bottomRefHist.GetXaxis().SetTitleOffset(4.2)
+        bottomRefHist.GetYaxis().SetTitleOffset(y_title_offset)
+        #bottomRefHist.GetYaxis().SetNdivisions( int(np.ceil(bottomRefHist.GetMaximum())+1) ,2,0, False) 
+        bottomRefHist.GetYaxis().SetNdivisions( 5,3,0) 
+        
+        dOpt = ""
+        #bottomRefHist.Draw()
+        for s in bottomPadObjects:
+            s.Draw(dOpt + getattr(s,"drawOption","") )
+            dOpt = "same"
+            
+        #bottomPadObjects[0].GetYaxis().SetTitleOffset(0.5)
+        #bottomPadObjects[0].GetYaxis().SetTitleSize(0.08)
+        
+        
+        bottomPad.Draw()
+    if doDraw:
+        c1.Draw()
+
+    ret = {'canv':c1, 'pads': [topPad, bottomPad]}
+    return ret
+
+
+
+    
+
+
+def getCanvPos(canvas, margin = 0.01):
+    x1  = round( margin +  ( canvas.GetUxmin()-canvas.GetX1() ) / (canvas.GetX2()-canvas.GetX1()) , 3)
+    x2  = round(-margin +  ( canvas.GetUxmax()-canvas.GetX1() ) / (canvas.GetX2()-canvas.GetX1()) , 3)
+    y1  = round( margin +  ( canvas.GetUymin()-canvas.GetY1() ) / (canvas.GetY2()-canvas.GetY1()) , 3)
+    y2  = round(-margin +  ( canvas.GetUymax()-canvas.GetY1() ) / (canvas.GetY2()-canvas.GetY1()) , 3)
+    return (x1,y1,x2,y2)
+
+
+
+def getDistributionFromList(l, nBins,  minVal=None, maxVal=None, name="dist", weighted=False):
+    """
+        Fill histogram with the values in list l
+    """
+    minVal = minVal if minVal else min(l)
+    maxVal = maxVal if maxVal else max(l)
+    h = ROOT.TH1D(name,name,nBins,minVal,maxVal)
+    for v in l:
+        v_ = getattr(v,"val",v)
+        if weighted:
+            sigma = v.sigma
+            h.Fill( v_ , 1/sigma**2 )
+        else:
+            h.Fill( v_  )
+    return h
+
+
+
+def getFitError(h, cl=0.68, color=None, style=3544):
+    """
+    Has to be done right after the fit!!, i.e
+    h.Fit("gaus")
+    he = getFitError(h, cl=0.96)
+    """
+    he = h.Clone()
+    if hasattr(he,'Reset'):
+        he.Reset()
+    ROOT.TVirtualFitter.GetFitter().GetConfidenceIntervals(he, cl)
+    he.SetFillColor( color if color else h.GetLineColor() )
+    he.SetFillStyle( style )
+    he.SetMarkerStyle(22)
+    he.SetMarkerSize(0)
+    return he
+
+
 
 ###################################
 ##
@@ -366,5 +749,4 @@ def getChunkFirstLast(nEntries,nSplit):
     nPerTree = math.floor( nEntries/nSplit ) 
     chunkFirstLast = [ ( (i-1)*nPerTree,(i )*nPerTree  if i<nSplit else nEntries+1 )  for i in range(1,nSplit+1)  ]
     return chunkFirstLast
-
 

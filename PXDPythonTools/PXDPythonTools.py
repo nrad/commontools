@@ -891,21 +891,21 @@ def getModuleRDF(rdf, cut, sensorIDvar="sensorID", iLayNum=2):
     return rdf_dict
 
 
-def getTH2DFromRDF(rdf, var, binning, name=None, title=None):#, xtitle=None, ytitle=None): 
-    var_ = ":".join(var) if isinstance(var,(tuple,list)) else var
-    if ":" in var:
-        var_ = list(reversed(var_.split(":"))) #RDataFrame wants x:y
+#def getTH2DFromRDF(rdf, var, binning, name=None, title=None):#, xtitle=None, ytitle=None): 
+#    var_ = ":".join(var) if isinstance(var,(tuple,list)) else var
+#    if ":" in var:
+#        var_ = list(reversed(var_.split(":"))) #RDataFrame wants x:y
+#    
+#    name = name if name else uniqueName("Hist")
+#    title = title if title else name
+#    histo2d_args = ( (name,title) +binning ,) + tuple( var_.split(":") )
+#    print(histo2d_args)
+#    h = rdf.Histo2D(*histo2d_args)
+#    #if xtitle: h.GetXaxis().SetTitle(xtitle)
+#    #if ytitle: h.GetYaxis().SetTitle(ytitle)
+#    return h
     
-    name = name if name else uniqueName("Hist")
-    title = title if title else name
-    histo2d_args = ( (name,title) +binning ,) + tuple( var_.split(":") )
-    print(histo2d_args)
-    h = rdf.Histo2D(*histo2d_args)
-    #if xtitle: h.GetXaxis().SetTitle(xtitle)
-    #if ytitle: h.GetYaxis().SetTitle(ytitle)
-    return h
-    
-    
+getTH2DFromRDF = ROOTHelpers.getTH2DFromRDF    
 
 
 

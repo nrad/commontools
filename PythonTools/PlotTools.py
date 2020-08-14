@@ -38,6 +38,16 @@ def makePlotFromPlotVar(stack, plot_var, selection_string ):
     return plot
 
 
+
+
+
+
+
+
+###
+###  RootTools plotting
+###
+
 def makeAllPlots(stack, selection, plot_names, plot_variables=None):
     
     pvars = [ plot_variables[p] for p in plot_names] if plot_variables else plot_names
@@ -47,6 +57,9 @@ def makeAllPlots(stack, selection, plot_names, plot_variables=None):
 
 
 def drawPlot( plot, legend=([0.2,0.6,0.9,0.9],3), save_dir = "./figs/", sorting = True, logY = True , **kwargs):
+    """
+        wrapper for RootTools plotting...
+    """
     c = RootTools.plotting.draw(  plot, 
                               legend = legend,
                               #plot_directory = "./figs/", 
@@ -69,6 +82,9 @@ def plotAndDraw(stack,
                 plot_variables = None,
                 **kwargs,
                ):
+    """
+        wrapper for RootTools plotting
+    """
     if not plot_variables:
         if not all( [isinstance(p,PlotVariable) for p in plot_names]):
             raise Exception("If plot_variables is not given, the plot_names should be PlotVariables")

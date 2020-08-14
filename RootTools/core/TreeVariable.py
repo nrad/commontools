@@ -11,6 +11,8 @@ import RootTools.core.helpers as helpers
 allTypes  = set(helpers.cStringTypeDict.keys())
 allCTypes = set(helpers.cStringTypeDict.values())
 
+counterVariable = "n{VarName}"
+
 class TreeVariable( object ):
     __metaclass__ = abc.ABCMeta
    
@@ -106,7 +108,7 @@ class VectorTreeVariable( TreeVariable ):
     def counterVariable(self):
         ''' Return a scalar counter variable 'nVectorname/I'
         '''
-        return ScalarTreeVariable('n'+self.name, 'I')
+        return ScalarTreeVariable(counterVariable.format(VarName=self.name), 'I')
 
     def __str__(self):
         return "%s(vector[%s], components: %s )" %(self. name, self.nMax, ",".join(str(c) for c in self.components) )
