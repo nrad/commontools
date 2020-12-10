@@ -28,6 +28,24 @@ class TreeVariable( object ):
         except ( ValueError, AssertionError ):
             return ScalarTreeVariable.fromString( string )
 
+def makeTreeVariables( baseName, variables=[], counter="n{base}", capitalizeCounter=True, varTypes="F"):
+    """
+        A Helper class to create TreeVariables easily
+        variables = TreeVariables( "jet", ["pt", "eta", "phi"] )
+    """
+
+    treeVariables = []
+    if len(variables):
+        variableString = "%s[%s]"%(baseName, ','.join(['%s/%s'%(var, varTypes) for var in variables] ) )
+        vectorVar = TreeVariable.fromString( variableString )
+        treeVariables.append( vectorVar )
+        if counter:
+            treeVariables.insert(0, vectorVar.counterVariable(capitalize=capitalizeCounter) )
+    else:
+        treeVariables.append( TreeVariable.fromString( baseName+"/%s"%varTypes ) )
+        
+    return treeVariables
+
 class ScalarTreeVariable( TreeVariable ):
 
     def __init__( self, name, tp, defaultCString = None ):
@@ -105,10 +123,10 @@ class VectorTreeVariable( TreeVariable ):
     def components(self):
         return self._components
 
-    def counterVariable(self):
+    def counterVariable(self, capitalize=True):
         ''' Return a scalar counter variable 'nVectorname/I'
         '''
-        return ScalarTreeVariable(counterVariable.format(VarName=self.name), 'I')
+        return ScalarTreeVariable(counterVariable.format(VarName=(self.name[0].upper() + self.name[1:] if capitalize else self.name) ), 'I')
 
     def __str__(self):
         return "%s(vector[%s], components: %s )" %(self. name, self.nMax, ",".join(str(c) for c in self.components) )

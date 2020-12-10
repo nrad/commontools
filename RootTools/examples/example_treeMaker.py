@@ -37,7 +37,7 @@ new_variables =     [ TreeVariable.fromString('MyJet[pt2/F]' ) ] \
 # Define a reader
 reader = s0.treeReader( variables = read_variables,  selectionString = "met_pt>50")
 
-# Define a filler
+# define a filler
 
 #A simple eample
 def filler(event):
