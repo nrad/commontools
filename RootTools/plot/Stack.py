@@ -139,8 +139,13 @@ class Stack ( list ):
         import itertools
         return list(itertools.chain(*stackTypeList))
 
-    def getYieldsFromDraw(self, selectionString = None, weightString = None, returnInfo = True):
-        ret = self.applyFunc( lambda s: s.getYieldFromDraw( selectionString, weightString, returnInfo=True) )
+    def getYieldsFromDraw(self, selectionString = None, weightString = None, returnInfo = True, returnDataFrame=False):
+        ret = self.applyFunc( lambda s: s.getYieldFromDraw( selectionString, weightString, returnInfo=returnInfo if not returnDataFrame else True) )
+        if returnDataFrame:
+            import pandas
+            df = pandas.DataFrame( self.flatten(ret) )
+            df.set_index('name', inplace=True)
+            ret = df
         return ret
 
 
