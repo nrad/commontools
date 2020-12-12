@@ -5,7 +5,7 @@ import uuid
 import os
 
 from PythonTools.NavidTools import uniqueName, hashString, hashObj
-
+ROOT.TH1.SetDefaultSumw2()
 
 ###################################
 #      
@@ -269,6 +269,25 @@ def th2Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
             newhist.SetBinContent(x, y, newbc)
     return newhist
 
+
+def th1Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
+    """
+        Returns a new histogram after applying func(xbin,ybin,bincontent) to each bin of hist.
+        if ignoreZeros is true, the new hist will not be filled if round(bincontent,10)==0
+        Useful to perform operations on multiple Histograms:
+        new_hist = th2Func(h1, func= lambda x,y,bc : h1.GetBinContent(x,y) + 0.5 h2.GetBinContent(x,y) )
+        BUT YOU should make sure they  have the same binnings otherwise the result would be nonsense.
+    """
+    newhist = hist.Clone()
+    newhist.Reset()
+    nx = hist.GetNbinsX()
+    for x in range(nx+1):
+        bc = hist.GetBinContent(x)
+        newbc = func(x,bc)
+        if ignoreZeros and round(newbc,10)==0:
+           continue 
+        newhist.SetBinContent(x,newbc)
+    return newhist
 
 def getTH2FbinContent(hist , legFunc= lambda x,y : (x,y), getError=False, ignoreZeros=True, binContentFunc=None):
     """

@@ -66,16 +66,34 @@ class PickleDB():
 
 
 
+#def dict_func ( func , d):
+#    """
+#    creates a new dictionary with the same structure and depth as the input dictionary
+#    but the final values are determined by func(val)
+#    """
+#    new_dict = {}
+#    for k in d.keys():
+#        v = d.get(k)
+#        if type(v)==dict:
+#            ret = dict_func(func, v)
+#        else:
+#            ret = func(v)
+#        new_dict[k] = ret
+#    return new_dict
+
 def dict_func ( func , d):
     """
     creates a new dictionary with the same structure and depth as the input dictionary
     but the final values are determined by func(val)
+    depth is the maximum depth we will dive into
     """
     new_dict = {}
     for k in d.keys():
         v = d.get(k)
-        if type(v)==dict:
-            ret = dict_func(func, v)
+        #if type(v)==dict:
+        #    ret = dict_func(func, v)
+        if hasattr(v, 'items') and (depth!=0):
+            ret = dict_func(func, v, depth=depth-1)
         else:
             ret = func(v)
         new_dict[k] = ret
