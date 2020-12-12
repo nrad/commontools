@@ -105,7 +105,15 @@ class Basf2Path(PathDefiner):
         modularAnalysis.applyCuts('Upsilon(4S):vertexKFit', 'nParticlesInList(Upsilon(4S):vertexKFit)==1', path=self.path)
 
 
-
+    def set_module_params(self, module_name, **new_params ):
+        path = self.path
+        mod_list = path.modules()
+        for mod in mod_list:
+            if not mod.name() == module_name:
+                continue
+            print (" found module: ", mod)
+            for param_name, param_val in new_params.items():
+                mod.param(param_name, param_val)
     
     def add_simulation_to_path(self,  nEvents = 10000, experiment = 0 , run = 1, vertex=None, covVertex=None, mode = None, output_cdst = None, bkg_files=None, path=None):
         from generators import add_kkmc_generator, add_babayaganlo_generator, add_evtgen_generator
@@ -130,10 +138,10 @@ class Basf2Path(PathDefiner):
         if covVertex:
             beamparameters.param("covVertex", covVertex)
         if mode=='ee':
-            add_babayaganlo_generator(path, 'ee')
-        elif mode=='mumu':
+            add_babayaganlo_generator(path, finalstate='ee')
+        elif mode in ['mumu', 'mu+mu-', 'mu-mu+', 'dimu', 'dimuon']:
             # generate events with kkmc
-            add_kkmc_generator(path, 'mu+mu-')
+            add_kkmc_generator(path, finalstate='mu-mu+')
         elif mode in ['charged', 'mixed', 'signal']:
             add_evtgen_generator(path, finalstate=mode)
         else:
