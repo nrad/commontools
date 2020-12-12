@@ -14,8 +14,14 @@
 
 
 
-import RootTools.core.standard as RootTools
+#import core.standard as RootTools
 from RootTools.core.Sample import check_equal_
+from RootTools.core.Sample import Sample 
+from RootTools.plot.Stack import Stack
+from RootTools.plot.Color import Color
+from RootTools.plot import styles
+
+
 import itertools
 import param
 #import NavidTools.NavidTools as nt
@@ -101,7 +107,9 @@ def makeSampParams(sample_set , **kwargs):
     return samp_params      
 
 def makeRootToolsSampFromParams(samp_param ):
-    samp = RootTools.Sample.fromFiles(samp_param.name, 
+
+    #from RootTools.core.Sample import Sample
+    samp = Sample.fromFiles(samp_param.name, 
                                samp_param._files,  
                                weightString=samp_param.weight_string,
                                selectionString=samp_param.selection_string,
@@ -152,7 +160,7 @@ def makeCombinedSamps( samps_all, samps_to_combine, samp_styles):
         if not slist:
             print("WARNING: Didn't find matching sample for %s"%sname)
             continue
-        samps[sname] = RootTools.Sample.combine( sname, [samps_all[s] for s in slist] )
+        samps[sname] = Sample.combine( sname, [samps_all[s] for s in slist] )
        
         samps[sname].addWeightString(check_equal_([samps_all[s].weightString for s in slist]))
         for tag, val in tags.items():
@@ -168,59 +176,12 @@ def makeCombinedSamps( samps_all, samps_to_combine, samp_styles):
 
 
 
-import ROOT
-__iColor0=1700
-_colors  = []
-def Color(iColor=None):
-    #from ROOT import ddTColor
-    myColor = ROOT.TColor.GetFreeColorIndex()
-    my_colors = [
-                    #( 56, 105, 177 ), #blue
-                    ( 70, 165, 234 ), #blue
-                    ( 63, 152, 82 ) , # green
-                    ( 211, 93, 96 ) , # red
-                    ( 144, 102, 167 ), # purple
-                    ( 218, 126, 48 ), # orange
-
-
-                    (189, 61, 235),
-                    (102, 0, 102),
-                    (255, 228, 206),
-                    (74, 95, 245),
-                    (27, 193, 209),
-                    (0, 26, 80),
-                    (254, 189, 38),
-                    (230, 72, 30),
-                    (43, 150, 82),
-                    (22, 209, 92),
-                    (193, 197, 158),
-                    (245, 208, 38),
-                    (235, 27, 54),
-
-    ]
-    
-    #indx    = (__iColor - __iColor0)%len(my_colors)
-    if iColor != None:
-        if iColor>len(my_colors):
-            return iColor
-        else:
-            indx = iColor
-        print('color:', iColor,indx)
-    else: 
-        indx = Color.index%len(my_colors)
-    color = my_colors[indx]
-    Color.index+=1
-    
-    tcolor = ROOT.TColor(myColor, *[x/255. for x in color] )
-    _colors.append(tcolor)
-    return myColor
-Color.index=0 ## hack to keep count how many times function is called
-
 
 
 
 
 class Samples():
+    #import RootTools.core.standard as RootTools
     def __init__(self, name , sample_set, settings=None, samps_to_combine=[], samp_styles=[], tree_name='tau3x1', strict=True):
 
         self.name = name
@@ -283,7 +244,7 @@ class Samples():
             style.update(**{'lineStyle':lineStyle})
         print(kwargs)
         print("STYLE", style)
-        sample.style = RootTools.styles.styler(**style)
+        sample.style = styles.styler(**style)
         self._samps_all[sname] = sample
         self._samps[sname] = sample
         setattr(self, sname, sample)
@@ -295,7 +256,7 @@ class Samples():
         stack_list = [ [ self._samps[s] for s in sig_list] + [ self._samps[s] for s in bkg_list] ]+\
                      [ [ self._samps[s] for s in data_list]]
         #print( stack_list )
-        stack = RootTools.Stack( * [ s for s in stack_list if s ] )
+        stack = Stack( * [ s for s in stack_list if s ] )
         #self._stack = stack
         #setattr(self, '_stack',  stack )
         return stack
