@@ -154,9 +154,9 @@ def getFileChecksum(fname):
 #        results = map(func,args)
 #    return results
 
-def runFuncInParal( func, args , nProc = 15 , starmap=False):
-    import multiprocessing
-    #nProc=1
+
+def runFuncInParalNative( func, args , nProc = 15 , starmap=False):
+    import  multiprocessing
     if nProc >1:
         pool         =   multiprocessing.Pool( processes = nProc )
         if starmap:
@@ -170,6 +170,41 @@ def runFuncInParal( func, args , nProc = 15 , starmap=False):
             from itertools import starmap
             results = starmap(func,args)
         else:
-            results = map(func,args)
+            results = list(map(func,args))
     return results
+
+def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False):
+    """
+        uses pathos.multiprocessing instead of native multiprocessing one
+        to avoid problems with pickling functions
+        
+        if it fails, the pool might need to get restarted again (pool.terminate(), pool.restart() )
+
+    """
+
+    try:
+        import pathos
+        useNativeMP = False
+    except ImportError:
+        useNativeMP = True
+
+    if useNativeMP or nProc==1 or native:
+        print("unable to import pathos... multiprocessing might crash because of pickling...")
+        return runFuncInParalNative( func, args, nProc, starmap )
+
+    if starmap:
+        pool   = pathos.helpers.mp.Pool( processes=nProc )
+        mp_map = pool.starmap
+    else:
+        pool = pathos.pools.ProcessPool( nodes=nProc)
+        mp_map = pool.map
+    results = mp_map( func, args )
+    pool.close()
+    pool.join()
+    pool.terminate()
+    if hasattr(pool, 'restart'):
+        pool.restart()
+    return results 
+
+
 

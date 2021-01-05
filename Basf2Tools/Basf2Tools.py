@@ -105,7 +105,12 @@ class Basf2Path(PathDefiner):
         modularAnalysis.applyCuts('Upsilon(4S):vertexKFit', 'nParticlesInList(Upsilon(4S):vertexKFit)==1', path=self.path)
 
 
-    def set_module_params(self, module_name, **new_params ):
+  
+     
+
+
+
+    def _set_module_params__old(self, module_name, **new_params ):
         path = self.path
         mod_list = path.modules()
         for mod in mod_list:
@@ -115,7 +120,13 @@ class Basf2Path(PathDefiner):
             for param_name, param_val in new_params.items():
                 mod.param(param_name, param_val)
     
-    def add_simulation_to_path(self,  nEvents = 10000, experiment = 0 , run = 1, vertex=None, covVertex=None, mode = None, output_cdst = None, bkg_files=None, path=None):
+    def set_module_params(self, name=None, type=None, recursive=False, **new_params): 
+        return set_module_params( path=self.path, name=name, type=type, recursive=recursive, strict=True, **new_params)
+
+    def find_module(self, name=None, type=None):
+        return find_module(self.path, name=name, type=type)
+
+    def add_simulation_to_path(self,  nEvents = 10000, experiment = 0 , run = 1, vertex=None, covVertex=None, mode = None, output_cdst = None, bkg_files=None, bkg_overlay=True, path=None, **kwargs):
         from generators import add_kkmc_generator, add_babayaganlo_generator, add_evtgen_generator
         from simulation import add_simulation
         from reconstruction import add_reconstruction, add_cdst_output
@@ -144,6 +155,26 @@ class Basf2Path(PathDefiner):
             add_kkmc_generator(path, finalstate='mu-mu+')
         elif mode in ['charged', 'mixed', 'signal']:
             add_evtgen_generator(path, finalstate=mode)
+        elif mode in ['mugun']:
+            path.add_module('ParticleGun',
+                             pdgCodes=[13],
+                             nTracks=1,
+                             momentumGeneration='uniform',
+                             momentumParams=[0.50, 3.00],
+                             thetaGeneration='uniform',
+                             thetaParams=[17, 150],
+                             #thetaParams=[40, 90],
+                             phiGeneration='uniform',
+                             phiParams=[0, 360],
+                             #phiParams=[10, 150],
+                             vertexGeneration='uniform',
+                             xVertexParams=[0.0, 0.0],
+                             yVertexParams=[0.0, 0.0],
+                             zVertexParams=[0.0, 0.0]
+                             )
+
+
+
         else:
             raise Exception("only ee, mumu, charged, mixed, signal modes. Instead got: %s"%mode)
     
@@ -153,7 +184,7 @@ class Basf2Path(PathDefiner):
         path.add_module("ActivatePXDGainCalibrator")
     
         # detector simulation
-        add_simulation(path, usePXDDataReduction=False, bkgfiles=bkg_files)
+        add_simulation(path, usePXDDataReduction=False, bkgfiles=bkg_files, bkgOverlay=bkg_overlay, **kwargs)
     
         if output_cdst:
             add_cdst_output(path, filename=output_cdst)
@@ -215,5 +246,86 @@ def remove_module(path, module):
         basf2.B2ERROR(f"Could not find module {module} in path, cannot remove")
     return new_path
 
+
+
+def set_module_params(path, name=None, type=None, recursive=False, strict=True, **kwargs):
+    """Similar to basf2.set_module_parameters, with slightly different (maybe more correct?)
+    recusrive behavior. The basf2 one raises exception if module is found ONLY in the subpaths, and
+    not in the main one.
+
+    Set the given set of parameters for all `modules <Module>` in a path which
+    have the given ``name`` (see `Module.set_name`)
+
+    Usage is similar to `register_module()` but this function will not create
+    new modules but just adjust parameters for modules already in a `Path`
+
+    >>> set_module_parameters(path, "Geometry", components=["PXD"], logLevel=LogLevel.WARNING)
+
+    Parameters:
+      path (basf2.Path): The path to search for the modules
+      name (str): Then name of the module to set parameters for
+      type (str): The type of the module to set parameters for.
+      recursive (bool): if True also look in paths connected by conditions or `Path.for_each()`
+      kwargs: Named parameters to be set for the module, see  `register_module()`
+    """
+
+    if name is None and type is None:
+        raise ValueError("At least one of name or type has to be given")
+
+    if not kwargs:
+        raise ValueError("no module parameters given")
+
+    #found = False
+    founds = []
+    for module in path.modules():
+        if (name is None or module.name() == name) and (type is None or module.type() == type):
+            # use register_module as this automatically takes care of logLevel
+            # and debugLevel parameters
+            basf2.register_module(module, **kwargs)
+            #found = True
+            founds.append(1)
+
+        if recursive:
+            if module.has_condition():
+                for condition_path in module.get_all_condition_paths():
+                    found = set_module_params(condition_path, name, type, recursive, strict=False, **kwargs)
+                    founds.append(found)
+            if module.type() == "SubEvent":
+                for subpath in [p.values for p in module.available_params() if p.name == "path"]:
+                    found = set_module_params(subpath, name, type, recursive, strict=False, **kwargs)
+                    founds.append(found)
+
+    found = sum(founds)
+    if strict:
+        if not found:
+            raise KeyError("No module with given name found anywhere in the path")
+        else:
+            print(f"Parameter values changes in { found } place(s)")
+    return found
+
+
+
+
+
+
+def find_module(path, name=None, type=None):
+    found = []
+    for m in path.modules():
+        #print(m.name(),m.type())
+        if name and m.name()==name:
+            found.append(m)
+        elif type and m.type()==type:
+            found.append(m)
+        if hasattr(m, 'get_all_condition_paths'):
+            for p in m.get_all_condition_paths():
+                new = find_module(p, name, type)
+                for m_ in new:
+                    found.append(m_)
+    return found
+
+
+
+def get_module_params(module):
+    return {x.name:x.values for x in module.available_params()}
 
 

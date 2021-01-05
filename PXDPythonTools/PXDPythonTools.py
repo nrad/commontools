@@ -229,8 +229,8 @@ def decorateHist(h,**d):
 
         
 
-def getPXDth2d(tree, name, var = "%s:%s"%(yvar,xvar), binning = binning_phi0+binning_tan_lambda, cut="(1)", title=None, decorateDict={}):  
-    h = ROOTHelpers.getPlotFromChain( tree, var, binning, cut, weight="(1)", name=name)
+def getPXDth2d(tree, name, var = "%s:%s"%(yvar,xvar), binning=binning_x_phi, cut="(1)", weight="(1)", title=None, decorateDict={}):  
+    h = ROOTHelpers.getPlotFromChain( tree, var, binning, cut, weight=weight, name=name)
     decorateHist(h,**decorateDict)
     if title:
         h.SetTitle(title)

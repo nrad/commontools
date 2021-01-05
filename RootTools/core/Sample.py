@@ -289,9 +289,20 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
         import root_pandas
         
         if not hasattr(self, "_df"): 
-            logger.debug("First request of attribute 'df' for sample %s. Calling __loadChain", self.name)
+            logger.debug("First request of attribute 'df' for sample %s", self.name)
             self._df = root_pandas.read_root( self.files, where=self.selectionString ) 
         return self._df
+
+    # Handle loading of uproot -> open it when first used 
+    @property
+    def upr(self):
+        import uproot
+        if not hasattr(self, "_upr"): 
+            if not len(self.files)==1:
+                raise NotImplementedError("I don't know how to use uproot.open with multiple files. Can you teach me?")
+            logger.debug("First request of attribute 'upr' for sample %s.", self.name)
+            self._upr = uproot.open( self.files[0])[self.treeName] 
+        return self._upr
 
 
     # "Private" method that loads the chain from self.files

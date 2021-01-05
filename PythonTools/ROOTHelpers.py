@@ -567,7 +567,16 @@ def createCanvasPads(cname="drawHistos", wtopx=200, wtopy=10, xwidth=500, ywidth
     bottomPad.SetPad(bottomPad.GetX1(), bottomPad.GetY1(), bottomPad.GetX2(), y_border)
     return c1, topPad, bottomPad
 
-def drawRatioPlot( topPadObjects, bottomPadObjects=None, widths={}, plot=None, doDraw=False):
+def drawRatioPlot(  topPadObjects, 
+                    bottomPadObjects=None, 
+                    widths={}, 
+                    plot=None, 
+                    doDraw=False, 
+                    y_title_offset=2, 
+                    x_title_offset=4.2, 
+                    y_label_offset=0.02,
+                    fix_overlapping_labels=True,
+                ):
     """
     
     
@@ -576,7 +585,7 @@ def drawRatioPlot( topPadObjects, bottomPadObjects=None, widths={}, plot=None, d
     bottomPadObjects = bottomPadObjects if isinstance(bottomPadObjects, (list,tuple)) else [bottomPadObjects]
     topPadObjects = topPadObjects if isinstance(topPadObjects, (list,tuple)) else [topPadObjects]
     
-    y_title_offset = 2
+    #y_title_offset = 2
     default_widths = {'y_width':500, 'x_width':500, 'y_ratio_width':200}
     default_widths.update( widths )
     #y_border = default_widths['y_ratio_width']/float( default_widths['y_width'] )
@@ -639,17 +648,19 @@ def drawRatioPlot( topPadObjects, bottomPadObjects=None, widths={}, plot=None, d
         #adjustRatioStyle(bottomPadObjects[0], plot, topPadObjects[0], scaleFacRatioPad)
         #adjustRatioStyle(1,2,3,4)
         adjustHistAxis(bottomRefHist)
-        bottomRefHist.GetXaxis().SetTitle(plot.xTitle if plot else "")
+        if plot and plot.xTitle:
+            bottomRefHist.GetXaxis().SetTitle(plot.xTitle)
         
-        topRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the first axis label in Y 
-        bottomRefHist.GetYaxis().ChangeLabel(-1,-1,0.) # remove the last axis label in Y
-        bottomRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the last axis label in Y
+        if fix_overlapping_labels:
+            topRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the first axis label in Y 
+            bottomRefHist.GetYaxis().ChangeLabel(-1,-1,0.) # remove the last axis label in Y
+            bottomRefHist.GetYaxis().ChangeLabel(1,-1,0.) # remove the last axis label in Y
         
         #bottomRefHist.GetYaxis().SetNdivisions( int(np.ceil(bottomRefHist.GetMaximum())) ,0,2, False)
         #bottomRefHist.GetYaxis().SetNdivisions( 5 ,0,2, False)
         
-        bottomRefHist.GetYaxis().SetLabelOffset(0.02)
-        bottomRefHist.GetXaxis().SetTitleOffset(4.2)
+        bottomRefHist.GetYaxis().SetLabelOffset(y_label_offset)
+        bottomRefHist.GetXaxis().SetTitleOffset(x_title_offset)
         bottomRefHist.GetYaxis().SetTitleOffset(y_title_offset)
         #bottomRefHist.GetYaxis().SetNdivisions( int(np.ceil(bottomRefHist.GetMaximum())+1) ,2,0, False) 
         bottomRefHist.GetYaxis().SetNdivisions( 5,3,0) 
