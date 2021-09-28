@@ -81,7 +81,7 @@ class PickleDB():
 #        new_dict[k] = ret
 #    return new_dict
 
-def dict_func ( func , d):
+def dict_func ( func , d, depth=-1):
     """
     creates a new dictionary with the same structure and depth as the input dictionary
     but the final values are determined by func(val)
@@ -173,7 +173,9 @@ def runFuncInParalNative( func, args , nProc = 15 , starmap=False):
             results = list(map(func,args))
     return results
 
-def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False):
+def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False, verbose=False):
+    import time
+        
     """
         uses pathos.multiprocessing instead of native multiprocessing one
         to avoid problems with pickling functions
@@ -182,6 +184,7 @@ def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False):
 
     """
 
+    start = time.time()
     try:
         import pathos
         useNativeMP = False
@@ -189,7 +192,7 @@ def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False):
         useNativeMP = True
 
     if useNativeMP or nProc==1 or native:
-        print("unable to import pathos... multiprocessing might crash because of pickling...")
+        if verbose: print("unable to import pathos... multiprocessing might crash because of pickling...")
         return runFuncInParalNative( func, args, nProc, starmap )
 
     if starmap:
@@ -199,11 +202,17 @@ def runFuncInParal( func, args , nProc = 15 , starmap=False, native=False):
         pool = pathos.pools.ProcessPool( nodes=nProc)
         mp_map = pool.map
     results = mp_map( func, args )
+    if verbose: print("have the results!")
     pool.close()
+    if verbose: print("closed pool")
     pool.join()
+    if verbose: print("joined pool")
     pool.terminate()
+    if verbose: print("terminated")
     if hasattr(pool, 'restart'):
         pool.restart()
+        if verbose: print("restarted")
+    if verbose: print(f"all done... took { round(time.time()-start,3) } seconds")
     return results 
 
 

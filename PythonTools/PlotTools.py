@@ -8,7 +8,8 @@ class PlotVariable( param.Parameterized ):
     bins   = param.List()
     name   = param.String()
     xTitle = param.String()
-    overflow = param.Selector( default="both", objects=["upper","lower","both", None] )
+    yTitle = param.String()
+    overflow = param.Selector( default="both", objects=["upper","lower","both", None, False, ""] )
     cut    = param.String()
     logY   = param.Boolean(default=True)
     
@@ -19,6 +20,10 @@ class PlotVariable( param.Parameterized ):
         super().__init__(**kwargs)
         if not self.xTitle:
             self.xTitle = self.name
+        if not self.yTitle:
+            self.yTitle = self.name
+        if not self.overflow:
+            self.overflow = ""
 
 
 

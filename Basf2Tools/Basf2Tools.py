@@ -7,6 +7,11 @@ import sys
 #sys.path.append("/home/belle2/nrad/_old/from_cryll/")
 #from my_utils.basf2_helpers import PathDefiner, remove_module
 
+tf2.TestBit(ROOT.TFile.kRecovered)
+
+
+
+
 class PathDefiner:
 
     def __init__(self, global_tags=[], release=3):
@@ -47,7 +52,9 @@ class PathDefiner:
                 #basf2.conditions.override_globaltags()
                 #basf2.conditions.expert_settings(usable_globaltag_states={"TESTING", "VALIDATED",
                 #                                                          "PUBLISHED", "RUNNING", "OPEN"})
-                basf2.conditions.reset()
+                #basf2.conditions.reset()
+                basf2.conditions.expert_settings(usable_globaltag_states={"TESTING", "VALIDATED",
+                                                                          "PUBLISHED", "RUNNING", "OPEN"})
                 for global_tag in self.global_tags.split():
                     if global_tag.startswith("/"):
                         basf2.conditions.append_testing_payloads(global_tag)
@@ -71,6 +78,7 @@ class Basf2Path(PathDefiner):
 
 
     def track_reconstruction(self, components=["PXD","SVD","CDC"] ):
+        assert False
         import rawdata 
         from tracking import add_hit_preparation_modules, add_track_finding, add_track_fit_and_track_creator
 
@@ -86,6 +94,20 @@ class Basf2Path(PathDefiner):
     def add_reconstruction(self, **kwargs):
         import reconstruction
         reconstruction.add_reconstruction(self.path, **kwargs)
+
+    def add_raw_data_reconstruction(self, **kwargs):
+        import rawdata 
+        import reconstruction
+        self.path.add_module("Gearbox")
+        self.path.add_module("Geometry", useDB=True)
+        rawdata.add_unpackers(self.path)
+        reconstruction.add_reconstruction(self.path, **kwargs)
+
+        path = self.path
+        basf2.set_module_parameters(path, "PXDPostErrorChecker", CriticalErrorMask=0)
+        basf2.set_module_parameters(path, "PXDUnpacker", logLevel=basf2.LogLevel.ERROR, SuppressErrorMask=0xFFFFFFFFFFFFFFFF)
+        self.path = remove_module(path, module="TRGCDCT3DUnpacker")
+
 
     def etc(self):
             # Patch by Maiko Takahashi - BIIDP-1366
@@ -165,8 +187,8 @@ class Basf2Path(PathDefiner):
                              thetaParams=[17, 150],
                              #thetaParams=[40, 90],
                              phiGeneration='uniform',
-                             phiParams=[0, 360],
-                             #phiParams=[10, 150],
+                             #phiParams=[0, 360],
+                             phiParams=[91.5, 137.5],
                              vertexGeneration='uniform',
                              xVertexParams=[0.0, 0.0],
                              yVertexParams=[0.0, 0.0],
@@ -184,7 +206,9 @@ class Basf2Path(PathDefiner):
         path.add_module("ActivatePXDGainCalibrator")
     
         # detector simulation
-        add_simulation(path, usePXDDataReduction=False, bkgfiles=bkg_files, bkgOverlay=bkg_overlay, **kwargs)
+        print('bkg overlay:', bkg_overlay, 'bkg files:',  bkg_files)
+        #add_simulation(path, usePXDDataReduction=False, bkgfiles=bkg_files, bkgOverlay=bkg_overlay, **kwargs)
+        add_simulation(path, bkgfiles=bkg_files, bkgOverlay=bkg_overlay, **kwargs)
     
         if output_cdst:
             add_cdst_output(path, filename=output_cdst)

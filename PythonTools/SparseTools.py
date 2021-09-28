@@ -60,7 +60,8 @@ def getTH2FromList(x,y,bins, name='hist', title='hist'):
 
 
 
-def getTHnSparse(di, keys_bins, name="MyTHnSparse"):
+
+def getTHnSparse(di, keys_bins, name="MyTHnSparse", weight=None):
     """
         di: a dict of the uproot arrays
         key_bins: keys of the di to be used, and the corresponding bins.
@@ -69,33 +70,40 @@ def getTHnSparse(di, keys_bins, name="MyTHnSparse"):
                             ('y', (300,0,10)),
                             ('z', (200,-10,10)),
                  ])
-                 
-        
+
+
         also adds attributes
-    
+
     """
-    
+
     from array import array
     keys_bins = np.array( keys_bins )
     bins_all = keys_bins.T[1]
     names = keys_bins.T[0]
-    
+
     nbins = np.vstack( bins_all ).T[0].astype('int')
     xmin  = np.vstack( bins_all ).T[1]
     xmax  = np.vstack( bins_all ).T[2]
 
-    vals = np.array([di[x] for x in names])
-    
     thn = ROOT.THnSparseD(name, name, len(nbins), array('i',nbins), array('d',xmin), array('d',xmax) )
+    thn.Sumw2()
+    if not di:
+        return thn
+
+    vals = np.array([di[x] for x in names])
+
     for vals in np.array(vals.T):
-        thn.Fill( array('d', vals) )
+        if weight:
+            thn.Fill( array('d', vals), weight )
+        else:
+            thn.Fill( array('d', vals) )
     for i,name in enumerate(names):
         thn.GetAxis(i).SetName(name)
         thn.GetAxis(i).SetTitle(name)
         setattr(thn, name, thn.GetAxis(i) )   # just for shortcut, is lost if Clone()'ed
-        setattr(thn, f"index_{name}", i)      # 
+        setattr(thn, f"index_{name}", i)      #
     return thn
-   
+ 
 
 
     
@@ -104,16 +112,26 @@ def getTHnSparse(di, keys_bins, name="MyTHnSparse"):
     
 class SparseUp():
     
-    def __init__(self, name):
+    def __init__(self, name, keys_bins=()):
         """
             upr: uproot tree
+            name: just a name :)
+            keys_bins should look like:
+                 keys_bins = np.array([
+                            ('x', (100,0,10)),
+                            ('y', (300,0,10)),
+                            ('z', (200,-10,10)),
+                 ])
+            
         
         """
         #self.upr = upr # dont want to store the upr
         self.name = name
+        self.keys_bins = keys_bins
+        self.keys = list(zip(*keys_bins))[0] if len(keys_bins) else ()
+        self.bins = list(zip(*keys_bins))[1] if len(keys_bins) else ()
         
-        
-    def get_arrays(self, upr, keys, basename="", idx=None):
+    def get_arrays(self, upr, keys=None, basename="", idx=None):
         """
             Get arrays of tree branches,
             
@@ -126,10 +144,12 @@ class SparseUp():
         """
         
         di   = {}
+        keys = keys if keys else self.keys
         #upr  = upr if upr else self.upr
         
         col_base = f"{basename}_" if basename else basename
         cols = upr.arrays([f"{col_base}{k}" for k in keys], outputtype=tuple)
+        #cols = upr.arrays([f"{col_base}{k}" for k in keys])
         for k,c in zip(keys,cols):
             if type(idx) == type(None):
                 di[k]=c
@@ -138,8 +158,35 @@ class SparseUp():
                 if not idx.dtype in ( np.dtype('bool'), np.dtype('int') ):
                     raise TypeError("index array (idx) has have dtype int or bool. but it was %s. You can use idx.astype('int' or 'bool')"%idx.dtype)
                 di[k]=c[idx]
+     
+        self.di = di
         return di
 
+
+    def get_thn(self, di=None, bins=None, weight=None, name=None):
+        di = di if di else self.di
+        bins = bins if bins else self.keys_bins 
+        name = name if name else self.name
+        thn = getTHnSparse(di, keys_bins=bins, weight=weight, name=name)
+        fix_up_thn(thn)
+        self.thn = thn
+        return thn
+
+    def getProj(self, x,y=None, name=None, thn=None):
+        thn = thn if thn else self.thn
+        if not y:
+            proj = thn.Projection(getattr(thn,"index_%s"%x))
+        else:
+            proj = thn.Projection(getattr(thn,"index_%s"%x), getattr(thn,"index_%s"%y))
+        name = name if name else f"{x}" + ("" if not y else f"_vs_{y}" )
+        proj.SetName(name)
+        proj.SetTitle(name) 
+        return proj
+
+    def setcut(self, ax, min_max=()):
+        thn = self.thn
+        getattr(thn,ax).SetRange(  *min_max )
+        return thn
 
 def arrayIsNone(array):
     if type(array) in ( type(None), ):
@@ -147,6 +194,15 @@ def arrayIsNone(array):
     if hasattr(array, 'any'):
         return not array.any()
 
+
+
+def fix_up_thn(thn):
+    axes_labels = dict( [ (i,x.GetTitle()) for i,x in enumerate( thn.GetListOfAxes() ) ] )
+    for iax, axname in axes_labels.items():
+        setattr(thn, axname, thn.GetAxis(iax) )
+        setattr(thn, f"index_{axname}", iax)
+    setattr(thn, 'axes_labels', axes_labels )
+    setattr(thn, 'axes_idx',  {v:k for k,v in axes_labels.items() })
 
 
 

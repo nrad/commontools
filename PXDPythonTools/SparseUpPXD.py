@@ -2,6 +2,7 @@ from PythonTools.SparseTools import SparseUp, np, arrayIsNone, getTHnSparse
 from PythonTools.SparseTools import default_kwargs
 from PythonTools.standard import drawRatioPlot, th1Func, getHistMax
 from PythonTools.Legend import fixLegend
+from PythonTools.u_float import u_float
 import ROOT
 
 import time
@@ -25,18 +26,18 @@ intercept_bins = np.array([
        ( 'layer',  (2,      1,    3) ),
        #( 'ladder', (8,      1,    9) ),
        ( 'ladder',  (12,      1,    13) ),
-       ( 'sensor',  (2,      0,    1) ),
-       ( 'inside',  (2,      0,    1) ),
-       ( 'inside1', (2,      0,    1) ),
-       ( 'inside2', (2,      0,    1) ),
-       ( 'inside0p5', (2,      0,    1) ),
+       ( 'sensor',  (2,      1,    3) ),
+       ( 'inside',  (2,      1,    3) ),
+       ( 'inside1', (2,      0,    2) ),
+       ( 'inside2', (2,      0,    2) ),
+       ( 'inside0p5', (2,      0,    2) ),
 
        ( 'dist',   (100,   0,    0.02) ),
        ( 'du',     (100,   -0.01,    0.01) ),
        ( 'dv',     (100,   -0.01,    0.01) ),
        ( 'sigu',   (100,   0,    0.005) ),
        ( 'sigv',   (100,   0,    0.01) ),
-       ( 'nMatch', (5, 0, 5 ) ),
+       #( 'nMatch', (5, 0, 5 ) ),
     ])
 intercept_bins_dict = dict(intercept_bins)
     
@@ -52,9 +53,9 @@ class SparseUpPXD(SparseUp):
     pxd_keys = [ "layer", "sensorID",  "intercept_idx",  "dist",  "inIntercept", "inTrack", "dist_to_edge" ]
     
     intercept_base = "Intercept"
-    intercept_keys = [ "sensorID",  "z",  "phi",  "u",  "v",  "layer",  "ladder",  "sensor", "inside" ]
+    intercept_keys = [ "sensorID",  "z",  "phi",  "u",  "v",  "layer",  "ladder",  "sensor", 'pxd_idx']
     intercept_keys += ['du', 'dv', 'sigu', 'sigv', 'nMatch', 'dist', ]
-    intercept_keys += ['inside1', 'inside2', 'inside0p5']
+    intercept_keys += ['inside', 'inside1', 'inside2', 'inside0p5']
     
     track_base = "RecoTracks"
     track_keys = [ "tan_lambda_estimate",  "phi0_estimate",  "pt_estimate", "n_pxd_hits", "first_pxd_layer", "last_pxd_layer" ]
@@ -81,24 +82,20 @@ class SparseUpPXD(SparseUp):
     
     @default_kwargs(**default_intercept_cuts)
     def get_intercept_passed_tot(self, upr, **cuts):
-        CUT_TRACK_PT           =   cuts['cut_track_pt']  
-        CUT_N_TRACK            =   cuts['cut_n_track']  
-        CUT_PXD_INTERCEPT_DIST =   cuts['cut_pxd_intercept_dist']  
-        CUT_PXD_EDGE_DIST      =   cuts['cut_pxd_edge_dist']  
-        CUT_PXD_IN_INTERCEPT   =   cuts['cut_pxd_in_intercept']  
-        CUT_PXD_IN_TRACK       =   cuts['cut_pxd_in_track']  
-        CUT_INTERCEPT_INSIDE   =   cuts['cut_intercept_inside']  
-                                    
+        CUT_TRACK_PT            =   cuts['cut_track_pt']  
+        CUT_N_TRACK             =   cuts['cut_n_track']  
+        CUT_PXD_INTERCEPT_DIST  =   cuts['cut_pxd_intercept_dist']  
+        CUT_PXD_EDGE_DIST       =   cuts['cut_pxd_edge_dist']  
+        CUT_PXD_IN_INTERCEPT    =   cuts['cut_pxd_in_intercept']  
+        CUT_PXD_IN_TRACK        =   cuts['cut_pxd_in_track']  
+        CUT_INTERCEPT_INSIDE    =   cuts['cut_intercept_inside']  
         
         time_start = time.time()
 
-
         event_dict     = self.get_arrays(upr, ["nIntercept", "nRecoTracks", "nPXDCluster"])
-
 
         trks_dict        = self.get_arrays(upr, ['pt_estimate'], "RecoTracks" )
         trk_pt = trks_dict['pt_estimate']
-
 
         selected_evts  =      (event_dict['nRecoTracks'] == CUT_N_TRACK) \
                             & (trk_pt[trk_pt > CUT_TRACK_PT].counts == CUT_N_TRACK)
@@ -107,35 +104,56 @@ class SparseUpPXD(SparseUp):
         ## Apply event cuts when getting arrays
         ##
 
-        pxd_dict       = self.get_arrays(upr,  self.pxd_keys,       self.pxd_base       , idx=selected_evts )
+        #pxd_dict       = self.get_arrays(upr,  self.pxd_keys,       self.pxd_base       , idx=selected_evts )
+
         intercept_dict = self.get_arrays(upr,  self.intercept_keys, self.intercept_base , idx=selected_evts )
         track_dict     = self.get_arrays(upr,  self.track_keys,     self.track_base     , idx=selected_evts )
+
+        intercept_tot_idx =  (intercept_dict['inside']==1 if CUT_INTERCEPT_INSIDE else True)
+        intercept_tot = {k:v[intercept_tot_idx].flatten() for k,v in intercept_dict.items()}
+
+        #   ##
+        #   ## Impose conditions on PXD Clusters ()
+        #   ##
+
+        #   pxd_selected_idx =    (pxd_dict['dist'] < CUT_PXD_INTERCEPT_DIST) \
+        #                       & (pxd_dict['inIntercept'] == 1 if CUT_PXD_IN_INTERCEPT else True )\
+        #                       & (pxd_dict['inTrack'] == 1 if CUT_PXD_IN_TRACK else True )\
+        #                       & (pxd_dict['dist_to_edge'] >= CUT_PXD_EDGE_DIST )\
+
+
+        #   intercept_passed_idx   = pxd_dict['intercept_idx'][pxd_selected_idx].astype(int)
+        #   intercept_passed       = {k:v[intercept_passed_idx].flatten() for k,v in intercept_dict.items()}
 
         ##
         ## Impose conditions on PXD Clusters ()
         ##
 
-        pxd_selected_idx =    (pxd_dict['dist'] < CUT_PXD_INTERCEPT_DIST) \
-                            & (pxd_dict['inIntercept'] == 1 if CUT_PXD_IN_INTERCEPT else True )\
-                            & (pxd_dict['inTrack'] == 1 if CUT_PXD_IN_TRACK else True )\
-                            & (pxd_dict['dist_to_edge'] >= CUT_PXD_EDGE_DIST )\
+        ## get intercepts which are matched to a pxd cluster
+        intercept_matched_idx =  (intercept_tot_idx)\
+                              & (intercept_dict['pxd_idx']>=0)
+        intercept_matched_pxd_idx = intercept_dict['pxd_idx'][intercept_matched_idx].astype('int')
 
 
-        intercept_passed_idx   = pxd_dict['intercept_idx'][pxd_selected_idx].astype(int)
+        ## selelct the corresponding pxd clusters and mpose additional requirements 
+        pxd_dict_all     = self.get_arrays(upr,  self.pxd_keys,       self.pxd_base       , idx=selected_evts )
+        pxd_dict_matched           = {k:v[intercept_matched_pxd_idx] for k,v in pxd_dict_all.items() }
+
+        pxd_selected_idx =    (pxd_dict_matched['dist']          <  CUT_PXD_INTERCEPT_DIST) \
+                            & (pxd_dict_matched['inIntercept']  == 1 if CUT_PXD_IN_INTERCEPT else True )\
+                            & (pxd_dict_matched['inTrack']      == 1 if CUT_PXD_IN_TRACK else True )\
+                            & (pxd_dict_matched['dist_to_edge'] >= CUT_PXD_EDGE_DIST )\
+
+        # select the intercepts which correspond to the passed pxd clusters... (better way to do this?!)
+        intercept_passed_idx   = pxd_dict_matched['intercept_idx'][pxd_selected_idx].astype(int)
         intercept_passed       = {k:v[intercept_passed_idx].flatten() for k,v in intercept_dict.items()}
 
-        ##
-        ## Impose conditions on Intercepts
-        ##
-
-        intercept_tot_idx =  (intercept_dict['inside']==1 if CUT_INTERCEPT_INSIDE else True)
-        intercept_tot = {k:v[intercept_tot_idx].flatten() for k,v in intercept_dict.items()}
         
         print(f"Got intercepts. It took { round(time.time() - time_start , 3) } s") 
         
         ret = {'intercept_tot'   :intercept_tot,  #flat
                'intercept_passed':intercept_passed, #flat
-               'pxd':pxd_dict, 
+               'pxd':pxd_dict_matched, 
                'pxd_idx': pxd_selected_idx,
             
               }
@@ -243,25 +261,58 @@ def get_proj_pass_tot(thn_pass,thn_tot, axis='z', eff_range=(0.5,1), x_range=Non
         htot.GetXaxis().SetRangeUser(*x_range)
         hpass.GetXaxis().SetRangeUser(*x_range)
 
+    line = hpass.Clone()
+    line.Reset()
+
     hpass.SetLineColor(ROOT.kRed)
+    hpass.SetLineWidth(2)
     htot.SetMaximum( getHistMax(htot)[1]*1.2 ) 
-
+    htot.SetLineWidth(2)
  
-    eff = getRatio(hpass, htot)
-    eff.GetYaxis().SetRangeUser( *eff_range )
-    eff.SetLineColor(ROOT.kBlack)
-    eff.GetYaxis().SetTitle("Ratio")
-    eff.SetLineStyle(9)
+    try:
+        eff = ROOT.TEfficiency(hpass, htot)
+        if not eff:
+            raise Exception("TEfficiency Failed")
+        c=ROOT.TCanvas()
+        eff.Draw()
+        c.Draw()
+        heff = eff.GetPaintedGraph()
+        if not heff:
+            raise Exception("Something went wrong with getting TGraph from TEfficiency")
+    except Exception as exp:
+        print(e)
+        eff = getRatio(hpass, htot)
+        heff = eff
 
+    heff.GetYaxis().SetRangeUser( *eff_range )
 
-    line = th1Func(hpass, lambda x, bc: 1.0 )
-    line.SetTitle("")
+    #eff.SetLineColor(ROOT.kBlack)
+    #eff.GetYaxis().SetTitle("Ratio")
+    #eff.SetLineStyle(9)
+
+    htot.drawOption = "hist"
+    hpass.drawOption = "hist"
+
+    eff.SetFillColor(40)
+    eff.SetLineColor(40)
+    eff.SetMarkerColor(46)
+    eff.SetMarkerStyle(20)
+    eff.SetMarkerSize(0.5)
+    eff.drawOption = "5"
+    eff2= eff.Clone()
+    eff2.drawOption = "pX0"
+
+    line.Reset()
+    line = th1Func(line, lambda x, bc: 1 )
+    line.SetName("line")
+    line.SetTitle(" ")
     line.SetLineColor(ROOT.kBlack)
+    line.SetLineWidth(1)
     line.SetLineStyle(3)
     line.SetStats(False)
-    line.GetYaxis().SetTitle("Ratio")
+    line.GetYaxis().SetTitle("Efficiency")
     line.GetYaxis().SetRangeUser( *eff_range )
-
+    line.drawOption="hist X0 "
 
     #eff.Sumw2()=9
     #eff.drawOption="pE"
@@ -277,7 +328,7 @@ def get_proj_pass_tot(thn_pass,thn_tot, axis='z', eff_range=(0.5,1), x_range=Non
     if title:
         htot.SetTitle(title)
 
-    canvs = drawRatioPlot( [htot, hpass, leg], [line, eff], widths={'y_width':300,'x_width':800, 'y_ratio_width':300},
+    canvs = drawRatioPlot( [htot, hpass, leg], [line, eff, eff2], widths={'y_width':300,'x_width':800, 'y_ratio_width':300},
                         y_title_offset=1.5,
                         x_title_offset=3.0,
                         y_label_offset=0.02,
@@ -288,7 +339,7 @@ def get_proj_pass_tot(thn_pass,thn_tot, axis='z', eff_range=(0.5,1), x_range=Non
 
     select_sensor(thn_tot)
     select_sensor(thn_pass)
-    return [ (htot,hpass,eff,line),  canvs, leg ]
+    return [ (htot,hpass,eff,line, eff2, heff),  canvs, leg ]
     
     
     

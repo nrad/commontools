@@ -290,8 +290,15 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
         
         if not hasattr(self, "_df"): 
             logger.debug("First request of attribute 'df' for sample %s", self.name)
-            self._df = root_pandas.read_root( self.files, where=self.selectionString ) 
+            #self._df = root_pandas.read_root( self.files, where=self.selectionString ) 
+            self.__loadDf(where=getattr(self, 'selectionStringDF', self.selectionString), 
+                          columns=getattr(self, 'columns', None)
+                         )
         return self._df
+
+    def __loadDf(self, where=None, columns=None, ):
+        import root_pandas
+        self._df = root_pandas.read_root( self.files, where=where, columns=columns ) 
 
     # Handle loading of uproot -> open it when first used 
     @property
@@ -304,6 +311,37 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
             self._upr = uproot.open( self.files[0])[self.treeName] 
         return self._upr
 
+
+    def getArrays(self, keys, upr=None, basename="", idx=None, outputtype=tuple):
+        """
+            Get arrays of tree branches,
+            
+            keys: list of branch identifiers
+            branchname will be f"{basename}_{key}" if basename specified
+            
+            idx: array of indicies. if given, it will be used to mask the output array 
+        
+        """
+        
+        di   = {}
+        upr  = upr if upr else self.upr
+        keys = keys if keys else self.keys
+        
+        col_base = f"{basename}_" if basename else basename
+        cols     = upr.arrays([f"{col_base}{k}" for k in keys], outputtype=outputtype)
+        if outputtype == tuple:
+            for k,c in zip(keys,cols):
+                if type(idx) == type(None):
+                    di[k]=c
+                else:
+                    if not idx.dtype in ( np.dtype('bool'), np.dtype('int') ):
+                        raise TypeError("index array (idx) has have dtype int or bool. but it was %s. You can use idx.astype('int' or 'bool')"%idx.dtype)
+                    di[k]=c[idx]
+         
+            self.di = di
+        else:
+            di = cols
+        return di
 
     # "Private" method that loads the chain from self.files
     def __loadChain(self):
@@ -389,7 +427,7 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
         self.files = new_filelist
         return self
 
-    def addFriend( self, other_sample, treeName, sortFiles = False):
+    def addFriend(self, other_sample, treeName, sortFiles = False):
         ''' Friend a chain from another sample.
         '''
         if sortFiles:
@@ -397,6 +435,46 @@ class Sample ( SampleBase ): # 'object' argument will disappear in Python 3
 
         # Add Chains 
         self.friends.append( (other_sample, treeName) )
+
+    def findFriendTrees(self, these_to_those):
+        fileList = [x.GetTitle() for x in self.chain.GetListOfFiles()]
+        friendFileList = []
+        for f in fileList:
+            #print(f)
+            nf = f[:]
+            for this, that in these_to_those:
+                #print(nf, this, that)
+                nf = nf.replace(this,that)
+            friendFileList.append(nf)
+        return friendFileList
+
+
+    def addFriendTrees(self, friendTreeName, these_to_those, alias="", check_nevents=True):
+        friendTree = ROOT.TChain(friendTreeName)
+        friendFileList = self.findFriendTrees( these_to_those )
+        allIsGood = True
+        for f in friendFileList:
+            if not os.path.isfile(f):
+                print("Supposed Friend Tree does not seem to exist %s"%f)
+                #raise Exception( "Supposed Friend Tree does not seem to exist %s"%f )
+                allIsGood=False
+            friendTree.Add(f)
+        self.chain.AddFriend(friendTree, alias)
+        if check_nevents:
+            nevts = self.chain.GetEntries()
+            nfevts = friendTree.GetEntries()
+            if not nevts == nfevts:
+                print ("!!!!!!!!!!!!!!!!!!!!!    WARNING       !!!!!!!!!!!!!!!!!!!!!!")
+                print ("For Sample %s Number of Events for the tree and friend tree don't match! %s vs %s"%(self.name, nevts, nfevts))
+                nbadevents = self.chain.Draw("(1)", "evt!=evNumber")
+                if not nbadevents:
+                    print ("But they seem to match event by event....seems OK, but MAKE SURE IT IS!")
+                else:
+                    print ("There seem to a mismatch between event numbers individually... i.e. try this: %s"%'tree.Draw("(1)", "evt!==evNumber")')
+                    raise Exception()
+        return allIsGood
+
+
 
     def treeReader(self, *args, **kwargs):
         ''' Return a Reader class for the sample

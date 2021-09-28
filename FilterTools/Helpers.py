@@ -40,19 +40,143 @@ def Mmin( m,e,p,be):
     return math.sqrt(  m*m + 2*(be/2-e)*(e-p) ) 
 
 
+def getMmin(chain, p4_vars=p4_vars,  boost=False):
+    a1 = sumP4s(get3prongP4s(chain, p4_vars=p4_vars, ))
+    if boost:
+        a1.Boost(boost)
+    mmin = getMminFromP4(a1)
+    return mmin, a1
+
+def getMminFromP4(p4):
+    mmin = -999
+    if (not p4.E()>0) or (not p4.M()>0):
+        mmin = -999
+    else:
+        try:
+            mmin = math.sqrt( p4.M()**2 + 2*(Eb-p4.E())*(p4.E()-p4.P()) )
+        except ValueError:
+            mmin = -999
+    return mmin
+
+
+
+def getMminGKKFromP4(p4, theta):
+    mmin = -999
+    if (not p4.E()>0) or (not p4.M()>0):
+        mmin = -999
+    else:
+        try:
+            mmin = math.sqrt( p4.M()**2 + 2*(Eb-p4.E())*(p4.E()-p4.P()*cos(theta)) )
+        except ValueError:
+            mmin = -999
+    return mmin
+
+##
+## cos theta SF
+## 
+
+sfs = {  
+        ( -99, -0.5)   : 1.00054,  
+        (-0.5, 0.6  )  : 1.00097,  
+        (0.6, 0.8   )  : 1.00022, 
+        (0.8, 99  )    : 0.99885,
+      }
+
+sfs_down = {  
+        ( -99, -0.5)   : 1.00042,  
+        (-0.5, 0.6  )  : 1.00094,  
+        (0.6, 0.8   )  : 1.00017, 
+        (0.8, 99  )    : 0.99878,
+      }
+
+sfs_up = {  
+        ( -99, -0.5)   : 1.00066,  
+        (-0.5, 0.6  )  : 1.00099,  
+        (0.6, 0.8   )  : 1.00027, 
+        (0.8, 99  )    : 0.99892,
+      }
+
+
+sf_dicts = { 
+              #  'bucket16-proc12-neg':{
+              #   ( -1.1, -0.5) : {'central':1.00059, 'down':1.00043, 'up':1.00065},
+              #   (-0.5, 0.6)   : {'central':1.00015, 'down':1.00014, 'up':1.00017},
+              #   (0.6, 0.8)    : {'central':0.99944, 'down':0.99932, 'up':0.99946},
+              #   (0.8, 1)      : {'central':0.99832, 'down':0.99784, 'up':0.99835},
+              #                     },
+            'proc12':{
+                   ( -1.1, -0.5)  : {'central':1.00046 , 'down': 1.00036,  'up':1.00055} ,
+                   (-0.5, 0.6)    : {'central':1.00006 , 'down': 1.00003,  'up':1.00008} ,
+                   (0.6, 0.8)     : {'central':0.99931 , 'down': 0.99926,  'up':0.99936} ,
+                   (0.8, 1)       : {'central':0.99784 , 'down': 0.99776,  'up':0.99791} ,
+                },
+                'bucket16-proc12-pi':{
+                 ( -1.1, -0.5) : {'central':1.00043,  'down':1.00039, 'up':1.00059},  
+                 (-0.5, 0.6)   : {'central':1.00015,  'down':1.00014, 'up':1.00016},  
+                 (0.6, 0.8)    : {'central':0.99932,  'down':0.99929, 'up':0.99944},  
+                 (0.8, 1)      : {'central':0.99784,  'down':0.99780, 'up':0.99832},  
+                                   },
+                'bucket16-proc12-pi_2':{
+                 ( -1.1, -0.5) : {'central':1.00043,  'down':1.00039, 'up':1.00059},  
+                 (-0.5, 0.6)   : {'central':1.00015,  'down':1.00012, 'up':1.00027},  
+                 (0.6, 0.8)    : {'central':0.99932,  'down':0.99929, 'up':0.99944},  
+                 (0.8, 1)      : {'central':0.99784,  'down':0.99780, 'up':0.99832},  
+                                   }
+}
+
+  
+  
+  
+
+
+
+
+def findCosThetaSF(p4, sf_dict=sf_dicts['proc12'], key='central'):
+    cosTheta = cos(p4.Theta())
+    for (low,high), sfs in sf_dict.items():
+        if low < cosTheta <= high:
+            return sfs[key]
+    return False
+
+def applyMomentumSFonP4(p4, sf=1):
+    scale_fact = [sf]*3 + [1]
+    p4_corrected = ROOT.TLorentzVector()
+    m = p4.M() 
+    vect = p4.Vect()
+    vect_corrected = vect*sf
+    e_corrected    = math.sqrt(m*m + vect_corrected.Mag2() ) 
+    p4_corrected.SetPxPyPzE(p4.Px()*sf, p4.Py()*sf, p4.Pz()*sf, e_corrected) 
+    return p4_corrected
+
+
+def getMminCorrected(p4s, sf_list=[1,1,1]):
+    assert len(sf_list)==len(p4s)
+    corrected_p4s = [ applyMomentumSFonP4(p4, sf_list[i]) for i, p4 in enumerate(p4s) ]
+    corrected_mmin = getMminFromP4(sumP4s(corrected_p4s))
+    return corrected_mmin
+
+
+
+
+#######################################################################
+#######################################################################
+
 def getP1P2(chain, base_name="track_1prong{iTrk}_%s", p4_vars=p4_vars_CMS):
     P1, P2 = get1prongP4s(chain, p4_vars=p4_vars, base_name=base_name )
     return P1,P2
 
 def getCosTheta(P, mtau): #four momentum of the pion and the given mtau
+    """
+        where theta is the angle between the track and the tau
+    """
     ptau = np.sqrt(Eb**2 - mtau**2)
     #return (2*Eb*P.E() - mtau**2 - pion_mass**2)/ (2*P.P()*ptau)
-    cosTheta = (2*Eb*P.E() - mtau**2 - P.M2() )/ (2*P.P()*ptau)
+    cosTheta = (2*Eb*P.E() - mtau**2 - P.M2() )/ np.abs(2*P.P()*ptau)
     #print(cosTheta)
     return cosTheta
 
 
-def calcMTau(P1, P2, ret='roots'): #from four momentum
+def calcMTauSquaredCLEO(P1, P2, ret='roots'): #from four momentum
     """
             Use the analytical equations to find the mtau min
             ret :
@@ -74,6 +198,7 @@ def calcMTau(P1, P2, ret='roots'): #from four momentum
     q2 = np.sqrt( 2*Etau*P2.E() - P2.M2() ) 
     if np.isnan(q1) or np.isnan(q2):
         print('invalid q1 or q2', q1, q2)
+        #return [float('nan'), float('nan')]
         return []
 
     p1_2 = p1.Mag2()
@@ -93,10 +218,12 @@ def calcMTau(P1, P2, ret='roots'): #from four momentum
             roots = np.roots( [a,b,c] )
         except:
             #print(q1,q2)
-            print('no solution', [a,b,c], P1.M(), P2.M() , q1, q2, p1_cross_p2_2, p1_dot_p2)
-            return []    
+            print('----------- WARNING no solution', [a,b,c], P1.M(), P2.M() , q1, q2, p1_cross_p2_2, p1_dot_p2)
+            return [-999,-999]    
     
-        ret = np.array( [ (np.sqrt(x) if np.isreal(x) and np.real(x)>=0 else  - np.sqrt( np.real(x*np.conj(x)) ) ) for x in  roots ] , dtype='float64') ## if complex, still keep it as a crazy number
+        #ret = np.array( [ (np.sqrt(x) if np.isreal(x) and np.real(x)>=0 else  - np.sqrt( np.real(x*np.conj(x)) ) ) for x in  roots ] , dtype='float64') ## if complex, still keep it as a crazy number
+        #ret = np.array( [ (np.sqrt(x) if np.isreal(x) and np.real(x)>=0 else  - np.sqrt( np.real(x*np.conj(x)) ) ) for x in  roots ] , dtype='float64') ## if complex, still keep it as a crazy number
+        ret  = np.array( roots )
         ret.sort()
         return ret
     else:
@@ -132,15 +259,29 @@ def getP4(chain,  base_name="track_1prong0_%s", p4_vars=p4_vars_CMS, mass=None):
         p4.SetE(new_E)
     return p4
 
+
+def getVar(chain, var_names, base_name="track_1prong_%s", di=False):
+    var_names = var_names if isinstance(var_names, (list,tuple)) else [var_names]
+    ret = [getattr(chain, base_name%vname) for vname in var_names]
+    if di:
+        return dict(zip(var_names, ret))
+    else:
+        return ret[0] if len(var_names)==1 else ret    
+
+
 def get1prongP4s(chain, base_name="track_1prong{iTrk}_%s",  p4_vars=p4_vars_CMS, mass=pion_mass):
     p4s = [ getP4(chain, base_name=basee_name.format(iTrk=iTrk), p4_vars=p4_vars, mass=mass) for iTrk in [0,1] ]
     return p4s
 
 
 
-def get3prongP4s(chain, p4_vars=p4_vars, mass=pion_mass):
+def get3prongP4s(chain, p4_vars=p4_vars, mass=None):
     p4s = [ getP4(chain, base_name="track{iTrk}_3prong_%s".format(iTrk=iTrk), p4_vars=p4_vars, mass=mass) for iTrk in range(1,4)]
     return p4s
+
+def get3prongVar(chain, var):
+    ret = [getVar(chain, var, base_name="track{iTrk}_3prong_%s".format(iTrk=iTrk)) for iTrk in range(1,4)]
+    return ret
 
 def get3prongInvMs(chain, p4_vars=p4_vars, mass=pion_mass):
     p4s = get3prongP4s(chain, p4_vars=p4_vars, mass=mass )

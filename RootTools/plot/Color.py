@@ -35,7 +35,7 @@ def Color(iColor=None):
             return iColor
         else:
             indx = iColor
-        print('color:', iColor,indx)
+        #print('color:', iColor,indx)
     else: 
         indx = Color.index%len(my_colors)
     color = my_colors[indx]

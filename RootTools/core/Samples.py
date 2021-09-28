@@ -20,10 +20,10 @@ from RootTools.core.Sample import Sample
 from RootTools.plot.Stack import Stack
 from RootTools.plot.Color import Color
 from RootTools.plot import styles
+import param
 
 
 import itertools
-import param
 #import NavidTools.NavidTools as nt
 import glob
 from copy import deepcopy
@@ -39,6 +39,7 @@ class SampleParam(param.Parameterized):
     proc_tag = param.String()
     postfix  = param.String(default="")
     #exp    = param.Integer()
+    component = param.String(default="")
     isData = param.Boolean(default=False)
     isBkg = param.Boolean(default=False)
     isSignal = param.Boolean(default=False)
@@ -182,7 +183,7 @@ def makeCombinedSamps( samps_all, samps_to_combine, samp_styles):
 
 class Samples():
     #import RootTools.core.standard as RootTools
-    def __init__(self, name , sample_set, settings=None, samps_to_combine=[], samp_styles=[], tree_name='tau3x1', strict=True):
+    def __init__(self, name , sample_set={}, settings={}, samps_to_combine=[], samp_styles=[], tree_name='tau3x1', strict=True):
 
         self.name = name
         self._sample_set = sample_set
@@ -190,7 +191,6 @@ class Samples():
         self._samps_to_combine = samps_to_combine
         self._samp_styles      = samp_styles
         
-
 
         self._samp_params = makeSampParams( self._sample_set, **self._settings)
         #self._samps_all   = makeSampsAll( self._samp_params, tree_name)
@@ -206,7 +206,7 @@ class Samples():
         self._bkg_list   = [sname for sname,s  in self._samps.items() if getattr(s, 'isBkg', False) ]
         self._data_list  = [sname for sname,s  in self._samps.items() if getattr(s, 'isData', False) ]
 
-        
+            
         for sname, s in self._samps.items():
             setattr(self, sname,s)
 
@@ -242,12 +242,13 @@ class Samples():
         lineStyle = getattr(sample_info, 'style')
         if lineStyle:
             style.update(**{'lineStyle':lineStyle})
-        print(kwargs)
-        print("STYLE", style)
+        #print(kwargs)
+            #print("STYLE", style)
         sample.style = styles.styler(**style)
         self._samps_all[sname] = sample
         self._samps[sname] = sample
         setattr(self, sname, sample)
+        return sample
 
     def _getStack(self, sig_list=None, bkg_list=None, data_list=None ):
         sig_list   = self._sig_list  if sig_list  == None else sig_list
@@ -273,10 +274,17 @@ class Samples():
         from PythonTools.ROOTHelpers import getRDFHistoFromSample
         return self.stack.applyFunc( lambda x: getRDFHistoFromSample(x, *args, **kwargs) )
 
-    def getStackHistos(self, *args,**kwargs):
+    def getStackHistos(self, nProc=1, *args,**kwargs):
         from PythonTools.ROOTHelpers import getHistoFromSample
+        from functools import partial
         #def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None)
-        return self.stack.applyFunc( lambda x: getHistoFromSample(x, *args, **kwargs) )
+        #                plot_args = {'var':p.var, 'binning':p.bins, 'cutString':str(cut) if cut else cut, 'weight':str(weight) if weight else weight, 'nEvents':nEvents, 'addOverFlowBin':p.overflow)
+        histoFunc = partial( getHistoFromSample, *args, **kwargs)
+        if nProc <=1 :
+            return self.stack.applyFunc( histoFunc )
+        else:
+            #print('================ running with %s cores'%nProc)
+            return self.stack.applyFuncInParal( histoFunc, nProc=nProc )
 
 
     def getElists(self, cut, resetEList=True, retrieve=False):
@@ -284,7 +292,8 @@ class Samples():
         from PythonTools.ROOTHelpers import getAndSetEList
         self.stack.applyFunc(lambda s: getAndSetEList(s.chain, cut, resetEList=resetEList, retrieve=retrieve) )
 
-    def getHistos(self, plots, cut=None, weight=None, rdf=True, nEvents=None):
+
+    def getHistos(self, plots, cut=None, weight=None, rdf=True, nEvents=None, nProc=1, *args, **kwargs):
         rhistos = {}
         #Register the plots in the RDF (Fast step)
         histos = {}
@@ -293,7 +302,7 @@ class Samples():
             if rdf: 
                raise Exception("nEvents option does not work with RDFs")
 
-        if rdf:
+        if rdf: 
             for p in plots:
                 rhistos[p.name] = self.getStackHistosRDF(p.var, tuple(p.bins), cut=str(cut) if cut else cut, weight=weight )
             print("Registered Histograms in the RDFs (Lazy action)")
@@ -306,16 +315,20 @@ class Samples():
                                                                        setattr(histos[p.name][i][j], "weight", rhistos[p.name][i][j].weight) ,
                                                                        #setattr(histos[p.name][i][j], "ptr", rhistos[p.name][i][j]) ,
                                                                               ])
+        ## use chain.Draw instead
         else:
             for p in plots:
                 print(f"Getting Histogram: {p.name}")
-                histos[p.name] = self.getStackHistos(p.var, p.bins, cutString=str(cut) if cut else cut, weight=str(weight) if weight else weight, nEvents=nEvents )
+                histos[p.name] = self.getStackHistos(nProc=nProc, var=p.var, binning=p.bins, cutString=str(cut) if cut else cut, weight=str(weight) if weight else weight, nEvents=nEvents, addOverFlowBin=p.overflow, *args, **kwargs )
                 #self.applyFuncToStacByIndex(histos[p.name], lambda i,j,h: histos[p.name][i][j].SetTitle( self.stack[i][j].texName) )
         for p in plots:
             print(f"Plotting: {p.name}")
             #histos[p.name]  = self.stack.applyFuncToStack(rhistos[p.name], lambda x: x.GetValue().Clone() )
             self.stack.applyFuncToStackByIndex(histos[p.name], lambda i,j,s: self.stack[i][j].style(s) if hasattr(self.stack[i][j], 'style') else None )
-            self.stack.applyFuncToStackByIndex(histos[p.name], lambda i,j,s: s.SetTitle(self.stack[i][j].texName) )
+            self.stack.applyFuncToStackByIndex(histos[p.name], lambda i,j,s: s.SetTitle(self.stack[i][j].texName if self.stack[i][j].texName else self.stack[i][j].name) )
+            xtitle = p.xTitle
+            self.stack.applyFuncToStackByIndex(histos[p.name], lambda i,j,h: h.GetXaxis().SetTitle(xtitle) )
+            self.stack.applyFuncToStackByIndex(histos[p.name], lambda i,j,h: h.GetXaxis().CenterTitle() )
         return histos
 
 

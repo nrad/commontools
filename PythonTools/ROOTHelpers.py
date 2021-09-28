@@ -1,18 +1,33 @@
 import ROOT
 import itertools
+import functools
 import time
 import uuid
 import os
+import math
 
 from PythonTools.NavidTools import uniqueName, hashString, hashObj
 ROOT.TH1.SetDefaultSumw2()
+
 
 ###################################
 #      
 ###################################
 
 
-def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None):
+def joinStrings(*args, delim="&&", container="(%s)"):
+    return (" %s "%delim).join([container%x for x in args])
+
+joinCuts    = functools.partial(joinStrings, delim="&&")
+joinWeights = functools.partial(joinStrings, delim="*")
+
+
+###################################
+#      
+###################################
+
+
+def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "(1)", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None):
   """
         From HEPHYPythonTools!
         author unknown (probably Robert Schoefbeck)
@@ -25,10 +40,15 @@ def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binn
   else:
     if len(binning)==6:
       h = ROOT.TH2D(hname_tmp, hname_tmp, *binning)
-    else:
+    elif len(binning)==3:
       h = ROOT.TH1D(hname_tmp, hname_tmp, *binning)
+    elif len(binning)==9:
+      h = ROOT.TH3D(hname_tmp, hname_tmp, *binning)
+    else:
+      raise ValueError("Can't make sense of the bins! %s"%binning)
   nEventsArgs = (nEvents,0) if nEvents else () 
-  c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
+  #c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
+  c.Draw(var+">>%s"%hname_tmp, "(%s)*(%s)"%(cutString, weight), 'goff', *nEventsArgs)
 
   if variableBinning[0]:
     h.Sumw2()
@@ -42,10 +62,10 @@ def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "weight", binn
     nbins = res.GetNbinsX()
 #    print "Adding", res.GetBinContent(nbins + 1), res.GetBinError(nbins + 1)
     res.SetBinContent(nbins , res.GetBinContent(nbins) + res.GetBinContent(nbins + 1))
-    res.SetBinError(nbins , sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
+    res.SetBinError(nbins , math.sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
   if addOverFlowBin.lower() == "lower" or addOverFlowBin.lower() == "both":
     res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
-    res.SetBinError(1 , sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
+    res.SetBinError(1 , math.sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
   return res
 
 
@@ -150,8 +170,9 @@ def getRDFHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None)
     cut = str(cut) if cut else cut
     weight = str(weight) if weight else weight
 
-    kwargs['cut']    = sample.combineWithSampleSelection( cut )
-    kwargs["weight"] = sample.combineWithSampleWeight( weight )
+    kwargs['cutString']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelelction", True) else cut 
+    kwargs["weight"]       = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
+
     histo = getHistoFromRDF(sample.rdf, *args, **kwargs)
     histo.cut = kwargs['cut']
     histo.weight = kwargs['weight']
@@ -170,12 +191,15 @@ def getHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
     cut    = str(cut)    if cut else cut
     weight = str(weight) if weight else weight
 
-    kwargs['cutString']    = sample.combineWithSampleSelection( cut )
-    kwargs["weight"] = sample.combineWithSampleWeight( weight )
+    kwargs['cutString']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelelction", True) else cut 
+    kwargs["weight"]       = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
+  
     #if 'nFractEvents' in kwargs:
     #    kwargs['nEvents'] = int(sample.chain.GetEntries()*kwargs['nFractEvents'])
     #    kwargs["weight"] = f"({kwargs['weight']}*{kwargs['nFractEvents']})"
     histo = getPlotFromChain(sample.chain, *args, **kwargs)
+    histo.SetName(sample.name)
+    histo.SetTitle(sample.texName) 
     histo.cut = kwargs['cutString']
     histo.weight = kwargs['weight']
         
@@ -217,7 +241,8 @@ def getEListUniqueName(chain,cut,eListName=None):
         Produces unique name for eList
         TODO: at each run the unique name is different because of the python object ID, maybe fix this?
     """
-    eListName = eListName + "_" if eListName else "eList_"
+    #eListName = eListName + "_" if eListName else "eList_"
+    eListName = eListName + "_" if eListName else "%s_"%chain.GetName()
     eListUniqueName = eListName + hashObj( [chain,cut] )
     return eListUniqueName
 
@@ -248,7 +273,7 @@ def getObjFromFile(fname, hname):
 
 
 #
-def th2Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
+def th2Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True, name=None):
     """
         Returns a new histogram after applying func(xbin,ybin,bincontent) to each bin of hist.
         if ignoreZeros is true, the new hist will not be filled if round(bincontent,10)==0
@@ -257,6 +282,9 @@ def th2Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
         BUT YOU should make sure they  have the same binnings otherwise the result would be nonsense.
     """
     newhist = hist.Clone()
+    if name:
+        newhist.SetTitle(name)
+        newhist.SetName(name)
     newhist.Reset()
     nx = hist.GetNbinsX()
     ny = hist.GetNbinsY()
@@ -321,14 +349,6 @@ def getTH2FbinContent(hist , legFunc= lambda x,y : (x,y), getError=False, ignore
     return cont
 
 
-def getDistributionFromList(l, nBins,  minVal=None, maxVal=None, name="dist"):
-    minVal = minVal if minVal else min(l)
-    maxVal = maxVal if maxVal else max(l)
-    h = ROOT.TH1D(name,name,nBins,minVal,maxVal)
-    for v in l:
-        v_ = getattr(v,"val",v)
-        h.Fill( v_ )
-    return h
 
 
 def getTH2dist(th2d,*binning):
@@ -346,7 +366,8 @@ def getTH2dist(th2d,*binning):
 
 
 
-def saveCanvas(canv,dir="./",name="",formats=["pdf","png"], extraFormats=["C","root"] , make_dir=True):
+#def saveCanvas(canv,dir="./",name="",formats=["pdf","png"], extraFormats=["C","root"] , make_dir=True):
+def saveCanvas(canv,dir="./",name="",formats=["png"], extraFormats=[] , make_dir=True, showWebLink=False):
     if "$" in dir: 
         dir = os.path.expandvars(dir)
         if "$" in dir:
@@ -362,7 +383,8 @@ def saveCanvas(canv,dir="./",name="",formats=["pdf","png"], extraFormats=["C","r
         if not os.path.isdir(extraDir): mkdir_p(extraDir)
         for form in extraFormats:
             canv.SaveAs(extraDir+"/%s.%s"%(name,form) )
-
+    if showWebLink and 'www' in dir:
+        print( 'https://www.desy.de/~nrad/' + dir.split('www')[-1] )
 
 def drawLatex( txt = '', x=0.4, y=0.9,  font=22, size=0.04 , align=11, angle=0, setNDC=True):
     latex = ROOT.TLatex()
@@ -536,7 +558,7 @@ def adjustHistAxis(h):
         ax.SetLabelFont(43)
         ax.SetTitleFont(43)
         ax.SetLabelSize(26)
-        ax.SetTitleSize(22)
+        ax.SetTitleSize(26)
     #h.GetXaxis().SetTitleOffset(3)
     #h.GetYaxis().SetTitleOffset(1.5)
 
@@ -575,7 +597,7 @@ def drawRatioPlot(  topPadObjects,
                     y_title_offset=2, 
                     x_title_offset=4.2, 
                     y_label_offset=0.02,
-                    fix_overlapping_labels=True,
+                    fix_overlapping_labels=False,
                 ):
     """
     
@@ -626,9 +648,6 @@ def drawRatioPlot(  topPadObjects,
     
     
     
-    adjustHistAxis(topRefHist)
-    topRefHist.GetYaxis().SetTitleOffset(y_title_offset)
-    topRefHist.GetYaxis().SetMaxDigits(4)
     
     dOpt = ""
     for s in topPadObjects:
@@ -640,6 +659,11 @@ def drawRatioPlot(  topPadObjects,
     topPad.Update()
     topPad.Draw()
     c1.Update()
+
+    adjustHistAxis(topRefHist)
+    topRefHist.GetYaxis().SetTitleOffset(y_title_offset)
+    topRefHist.GetYaxis().SetMaxDigits(4)
+
     if ratio:
         bottomPad.cd()
        
@@ -684,6 +708,23 @@ def drawRatioPlot(  topPadObjects,
 
 
 
+def drawBelle2Info(lumi=4.7, label="Phase 3 (Preliminary)", y=0.87, x=0.19, size=27, size_diff=2, y_diff=0.1, x_diff=0, font=43):
+    tlatex = ROOT.TLatex()
+    tlatex.SetNDC()
+    tlatex.SetTextFont(font)  
+    tlatex.SetTextSize(size)
+    #tlatex.SetTextSize(0.060)
+    #y = 0.87
+    #x = 0.19
+    #size_diff = 2
+    if label:
+        tlatex.DrawLatex(x, y, r"#bf{Belle II} %s"%label)
+    tlatex.SetTextSize(size-size_diff)
+    #tlatex.SetTextSize(0.050)
+    if lumi:
+        #tlatex.DrawLatex(x, y-y_diff, "#int#it{L}dt = %s pb^{-1} "%lumi)
+        tlatex.DrawLatex(x-x_diff, y-y_diff, "#lower[0.00]{#int}#it{L}dt = %s fb^{-1} "%lumi)
+    return tlatex
     
 
 

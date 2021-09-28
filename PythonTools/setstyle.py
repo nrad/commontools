@@ -83,7 +83,7 @@ def setMyStyle():
   myStyle.SetPadTopMargin(0.05)
   myStyle.SetPadBottomMargin(0.13)
   myStyle.SetPadLeftMargin(0.16)
-  myStyle.SetPadRightMargin(0.02)
+  myStyle.SetPadRightMargin(0.05)
 
 # For the Global title:
 
@@ -93,6 +93,14 @@ def setMyStyle():
   myStyle.SetTitleTextColor(1)
   myStyle.SetTitleFillColor(10)
   myStyle.SetTitleFontSize(0.05)
+  myStyle.SetTitleBorderSize(0)
+  myStyle.SetTitleAlign(11)
+  myStyle.SetTitleFillColor(0)
+  myStyle.SetTitleX(0.5)
+  myStyle.SetTitleY(0.95)
+  myStyle.SetTitleFont(40)
+  myStyle.SetTitleFontSize(0.04)
+
   # myStyle.SetTitleH(0) # Set the height of the title box
   # myStyle.SetTitleW(0) # Set the width of the title box
   # myStyle.SetTitleX(0) # Set the position of the title box

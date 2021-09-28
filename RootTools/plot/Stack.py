@@ -87,6 +87,19 @@ class Stack ( list ):
                 if s==sample: indices.append((i,j))
         return indices
 
+    def applyFuncInParal(self, func=None, nProc=16):
+        from PythonTools.NavidTools import runFuncInParal
+        flat =  Stack.flatten(self)
+        ret_flat  =  runFuncInParal(func, flat, nProc=nProc, verbose=False)
+        samps_idx = list( map( self.getSampleIndicesInStack, self.flatten(self) )) 
+
+        ret = []
+        for iret, [(i,j)] in enumerate(samps_idx):
+            if len(ret) <= i:
+                ret.append([])
+            ret[i].append( ret_flat[iret] )
+ 
+        return ret
 
     def applyFunc(self, func=None):
         """
