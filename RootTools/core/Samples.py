@@ -34,30 +34,30 @@ from collections import OrderedDict
 
 
 class SampleParam(param.Parameterized):
-    reco_tag = param.String()
-    mc_tag = param.String()
-    proc_tag = param.String()
-    postfix  = param.String(default="")
+    reco_tag         = param.String()
+    mc_tag           = param.String()
+    proc_tag         = param.String()
+    postfix          = param.String(default="")
     #exp    = param.Integer()
-    component = param.String(default="")
-    isData = param.Boolean(default=False)
-    isBkg = param.Boolean(default=False)
-    isSignal = param.Boolean(default=False)
-    color    = param.Integer(default=1)
-    style    = param.Integer(default=0)
-    name   = param.String()
-    sample_name = param.String()
-    data_tag    = param.String()
-    xsec   = param.Number()
-    lumi   = param.Number()
-    files_pattern = param.String()
-    base_dir = param.String()
-    n_files = param.Integer()
-    tree_name = param.String(default="tau3x1")
-    weight_string = param.String(default="(1)")
+    component        = param.String(default="")
+    isData           = param.Boolean(default=False)
+    isBkg            = param.Boolean(default=False)
+    isSignal         = param.Boolean(default=False)
+    color            = param.Integer(default=1)
+    style            = param.Integer(default=0)
+    name             = param.String()
+    sample_name      = param.String()
+    data_tag         = param.String()
+    xsec             = param.Number()
+    lumi             = param.Number()
+    files_pattern    = param.String()
+    base_dir         = param.String()
+    n_files          = param.Integer()
+    tree_name        = param.String(default="tau3x1")
+    weight_string    = param.String(default="(1)")
     selection_string = param.String(default="(1)")
-    lumi = param.Number(default=1.0)
-    texName = param.String() 
+    lumi             = param.Number(default=1.0)
+    texName          = param.String() 
     
     def _get_files(self):
         import glob
@@ -83,6 +83,7 @@ class SampleParam(param.Parameterized):
         self._get_files()
 
     def _dict(self):
+        #return dict( self.values() )
         return dict( self.get_param_values() )
 
 
@@ -304,7 +305,7 @@ class Samples():
 
         if rdf: 
             for p in plots:
-                rhistos[p.name] = self.getStackHistosRDF(p.var, tuple(p.bins), cut=str(cut) if cut else cut, weight=weight )
+                rhistos[p.name] = self.getStackHistosRDF(p.var, tuple(p.bins), cut=str(cut) if cut else cut, weight=weight, *args, **kwargs)
             print("Registered Histograms in the RDFs (Lazy action)")
             #actually get the plots in the next step... should only take "time" for the first plot per sample
             print(f"Now getting them")
