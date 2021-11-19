@@ -22,6 +22,9 @@ joinCuts    = functools.partial(joinStrings, delim="&&")
 joinWeights = functools.partial(joinStrings, delim="*")
 
 
+def getVariablesFromString(var):
+    return list(set([x for x in re.findall("\w+",cut) if not x[0].isdigit() ]))
+
 ###################################
 #      
 ###################################
@@ -71,7 +74,7 @@ def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "(1)", binning
 
 
 
-opt_dict = {"*":"x", "+":"plus", "/":"over", "-":"minus", "(":"op", ")":"cp", ".": "p", ":":"cln", ",":"com", " ":""}
+opt_dict = {"*":"x", "+":"plus", "/":"over", "-":"minus", "(":"op", ")":"cp", ".": "p", ":":"cln", ",":"com", " ":"", "||":"or"}
 def defineVariableStringForRDF(v, prefix="defined_", opt_dict=opt_dict, ):
     vname = v
     redefined = False
@@ -169,10 +172,8 @@ def getRDFHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None)
     weight = kwargs.get("weight",None)
     cut = str(cut) if cut else cut
     weight = str(weight) if weight else weight
-
-    kwargs['cutString']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelelction", True) else cut 
-    kwargs["weight"]       = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
-
+    kwargs['cut']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelection", True) else cut 
+    kwargs["weight"] = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
     histo = getHistoFromRDF(sample.rdf, *args, **kwargs)
     histo.cut = kwargs['cut']
     histo.weight = kwargs['weight']
@@ -191,7 +192,7 @@ def getHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
     cut    = str(cut)    if cut else cut
     weight = str(weight) if weight else weight
 
-    kwargs['cutString']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelelction", True) else cut 
+    kwargs['cutString']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelection", True) else cut 
     kwargs["weight"]       = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
   
     #if 'nFractEvents' in kwargs:
@@ -207,6 +208,23 @@ def getHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
     return histo
      
 
+
+def getGraphsFromContours(contours):
+    """
+        h.Draw("CONT LIST")
+        contours = ROOT.gROOT.GetListOfSpecials().FindObject("contours")
+        gs=getGraphsFromContours(contours)
+
+    """
+    gs = []
+    for igl in range(contours.GetSize()):
+        gl = contours.At(igl)
+        for ig in range(gl.GetSize()):
+            g = gl.At(ig)
+            gs.append(g)
+            print(g, g.Integral())
+    gs = sorted(gs, key=lambda x: x.Integral(), reverse=True)
+    return gs
 
 
 
@@ -372,7 +390,7 @@ def saveCanvas(canv,dir="./",name="",formats=["png"], extraFormats=[] , make_dir
         dir = os.path.expandvars(dir)
         if "$" in dir:
             raise Exception("Unresolved environmental variables! %s"%dir)
-    if not os.path.isdir(dir) and make_dir: 
+    if not os.path.isdir(dir) and make_dir:
         makeDir(dir)
     if type(formats)!=type([]):
         formats = [formats]
@@ -707,6 +725,12 @@ def drawRatioPlot(  topPadObjects,
     return ret
 
 
+def convertUtoX(x, pad=None):
+    pad = pad if pad else ROOT.gPad
+    return (x-ROOT.gPad.GetX1())/(ROOT.gPad.GetX2()-ROOT.gPad.GetX1())
+def convertVtoY(v, pad=None):
+    pad = pad if pad else ROOT.gPad
+    return (v-ROOT.gPad.GetY1())/(ROOT.gPad.GetY2()-ROOT.gPad.GetY1())
 
 def drawBelle2Info(lumi=4.7, label="Phase 3 (Preliminary)", y=0.87, x=0.19, size=27, size_diff=2, y_diff=0.1, x_diff=0, font=43):
     tlatex = ROOT.TLatex()
@@ -799,14 +823,15 @@ def mkdir_p(path):
             raise
 
 def makeDir(path):
-    if "." in path[-5:]:
-        path = path.replace(os.path.basename(path),"")
-        print (path)
-    if os.path.isdir(path):
-        return
-    else:
-        #mkdir_p(path)
-        os.makedirs(path)
+    os.makedirs(path, exist_ok=True)
+    #if "." in path[-5:]:
+    #    path = path.replace(os.path.basename(path),"")
+    #    print (path)
+    #if os.path.isdir(path):
+    #    return
+    #else:
+    #    #mkdir_p(path)
+    #    os.makedirs(path)
 
 
 

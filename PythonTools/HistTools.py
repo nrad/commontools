@@ -2,6 +2,7 @@ from PythonTools.u_float import u_float
 from PythonTools.ROOTHelpers import drawRatioPlot
 from PythonTools.Legend import fixLegend
 from PythonTools.standard import drawLatex, getAndSetEList, getHistoFromSample, saveCanvas, th1Func, th2Func
+from PythonTools.StatHelpers import *
 
 import os
 import ROOT
@@ -10,7 +11,9 @@ import ROOT
 from copy import deepcopy
 import uuid
 import numpy as np
+from uncertainties import ufloat
 import math
+
 
 
 #from replot import defaults
@@ -171,14 +174,42 @@ def getHistIntegralAndError(h, option=""):
 
 
 
-def getQuantileWrtMedian(hist, pr=0.68, med_prob = 0.5):
+def getFullWidthWrtMedian(hist, pr=0.68, med_prob = 0.5):
+    """
+       calculates full width of histogram as the difference of  quantiles at  med+pr/2.0 and med-pr/2.0
+       
+    """
     #import numpy as np
     #med_prob = 0.5
     arr_prob = np.array([med_prob, med_prob - pr/2, med_prob + pr/2])
     q = np.array([0.0]*len(arr_prob))
     
     y=hist.GetQuantiles(len(q), q, arr_prob)
-    return (abs(q[1]) + abs(q[2]))/2.0
+    #return abs((abs(q[2]) - abs(q[1]))/2.0)
+    return q[2]-q[1]
+
+
+def getConfidenceInterval(hist, p=0.68, med_prob = 0.5, double_sided=True):
+    """
+       calculates confidence interval from the different in quantiles (Q)
+        for double sided:    Q(med+p/2) - Q(med-p/2)
+        for single sided:    Q(med+p) - Q(med)
+       and returns their difference
+    """
+    #import numpy as np
+    #med_prob = 0.5
+    if double_sided:
+        arr_prob = np.array([med_prob - p/2, med_prob + p/2])
+    else:
+        arr_prob = np.array([med_prob, med_prob + p])
+    q = np.array([0.0]*len(arr_prob))
+    
+    y=hist.GetQuantiles(len(q), q, arr_prob)
+    #return abs((abs(q[2]) - abs(q[1]))/2.0)
+    #return abs(q[1]) - abs(q[0])
+    return q[1]-q[0]
+
+
 
 def integrate(hist, x0, x1):
     """
@@ -188,8 +219,11 @@ def integrate(hist, x0, x1):
     x1_bin = hist.GetXaxis().FindBin(x1)
     return hist.Integral(x0_bin, x1_bin)
 
-
 def getBootstrappedQuantileError(hist, p=0.95, N=1000, uf=True):
+    raise Exception("use getBootstrappedFullWidth")
+
+def getBootstrappedFullWidth(hist, p=0.95, N=1000, half_width=False, uf=True):
+
     #import numpy as np
     new = hist.Clone()
     entries = hist.GetEntries()
@@ -200,7 +234,10 @@ def getBootstrappedQuantileError(hist, p=0.95, N=1000, uf=True):
             new.Reset()
             new.FillRandom(hist, int(entries))
             
-            vals.append( getQuantileWrtMedian(new, p))
+            width = getFullWidthWrtMedian(new, p)
+            if half_width:
+                width = width/2.0 
+            vals.append( width )
         
         new.Delete()
         res = (np.mean(vals), np.std(vals))
@@ -668,44 +705,31 @@ def makeGraphFromDF(df, x=None, y=None, xe=None, ye=None, nPoints=None, name=Non
 
 
 
-def getVal(uf):
-    if hasattr(uf, 'nominal_value'):
-        return uf.nominal_value
-    elif hasattr(uf, 'val'):
-        return uf.val
-    else:
-        raise ValueError("Can't tell if this is a ufloat!")
 
-def getSigma(uf):
-    if hasattr(uf, 'std_dev'):
-        return uf.std_dev
-    elif hasattr(uf, 'sigma'):
-        return uf.sigma
-    else:
-        raise ValueError("Can't tell if this is a ufloat!")
-
-
+########################################################################################################
+###################     
+########################################################################################################
 
 def makeTGraphFromDF(df, x_col, y_col, title=None, x_title=None, y_title=None):
     """
-        kinda dublicate of makeGraphFromDF.... need to combine the two 
+        kinda dublicate of makeGraphFromDF but smarter.... need to combine the two 
     """
     from numpy import array
-    
     nPoints = len(df)
     zeros   = array([0.0]*nPoints, dtype='float')
     x = df[x_col]
     y = df[y_col]
-    #print(y[0])   
-    ye = array( y.apply( lambda v: getSigma(v)), dtype='float' )  if hasattr(y[0], 'sigma') or hasattr(y[0], 'std_dev') else zeros
-    xe = array( x.apply( lambda v: getSigma(v)), dtype='float' )  if hasattr(x[0], 'sigma') or hasattr(x[0], 'std_dev') else zeros
-    
+    #xe = array( x.apply( lambda v: getSigma(v)), dtype='float' )  if hasattr(x[0], 'sigma') or hasattr(x[0], 'std_dev') else zeros
+    #ye = array( y.apply( lambda v: getSigma(v)), dtype='float' )  if hasattr(y[0], 'sigma') or hasattr(y[0], 'std_dev') else zeros
+    xe = array( x.apply( lambda v: getSigma(v, strict=False, def_val=0)), dtype='float' )  
+    ye = array( y.apply( lambda v: getSigma(v, strict=False, def_val=0)), dtype='float' )  
     withErrors = ( xe.any() or ye.any() ) # are all errors zero?
     #print(nPoints, ye,xe,withErrors)
 
     if withErrors:
         #print ( nPoints, array(x) , array(y.apply(lambda v: v.val)), xe, ye )
-        g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y.apply(lambda v: getVal(v)), dtype='float'), xe, ye )
+        #g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y.apply(lambda v: getVal(v)), dtype='float'), xe, ye )
+        g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y.apply(lambda v: getVal(v, strict=False)), dtype='float'), xe, ye )
     else:
         g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y,dtype='float'))
     g.GetXaxis().SetTitle(x_title if x_title else x_col)
@@ -1377,12 +1401,16 @@ def getSigBkgData(hists, foms=False):
     h_bkg  = addTHns(h_bkgs)
     h_sig.SetTitle('Signal')
     h_bkg.SetTitle('Background')
-    ret = {'sig':h_sig, 'bkg':h_bkg}
+    h_mc_tot = addTHns([h_bkg,h_sig])
+    ret = {'sig':h_sig, 'bkg':h_bkg, 'mc_tot':h_mc_tot}
 
     if len(hists)>1:
         h_datas = hists[1][:]
         h_data = addTHns(h_datas)
-        ret['data']=h_data
+        h_ratio  = getRatio(h_data, h_mc_tot)
+        h_ratio.SetTitle("data/mc")
+        h_ratio.SetName("ratio")
+        ret.update(data=h_data, ratio=h_ratio) 
     #h_bkg.SetFillColor(0)  
  
     if foms:
@@ -1393,6 +1421,8 @@ def getSigBkgData(hists, foms=False):
         
         ret.update(fom=fom, fom100=fom100)
     
+
+ 
     return ret
 
 
@@ -1446,6 +1476,56 @@ def getTHn(samp, keys_bins):
         thn = sup.get_thn(weight=eval(weight_string))
     return thn
 
+
+
+
+def getTHnToBeFixed(samp, keys_bins, trigger_string=None):
+    """
+
+    """
+    from PythonTools.SparseTools import SparseUp
+
+    keys_bins = np.array(keys_bins)
+    var_names = keys_bins.T[0]
+    binnings  = keys_bins.T[1]
+    nbins = np.vstack( binnings ).T[0].astype('int')
+    #xmin  = np.vstack( binnings ).T[1]
+    #xmax  = np.vstack( binnings ).T[2]
+
+
+    #samp = samps.tau_3pi
+    sup = SparseUp(samp.name, keys_bins )
+    sup.get_arrays(samp.upr)
+    print(samp.name)
+
+    trigger_vars = getVariablesFromString(trigger_string)
+    selection_arr = sup.get_arrays( samp.upr, keys=trigger_vars)
+    trig = selection_arr['hie']==1
+    sup.get_arrays(samp.upr, idx=trig)
+    #sup.get_arrays(samp.upr, idx=trig)
+    if 'exp' in samp.name or 'data' in samp.name:
+        #arr = sup.get_arrays( samp.upr, keys=['__experiment__', 'psnm_32', 'psnm_27'])
+        #exp = arr['__experiment__']
+        #psnm32 = arr['psnm_32']
+        #psnm27 = arr['psnm_27']
+        #first  = np.logical_and(np.logical_or( exp==7, exp==8), psnm27)
+        #second = np.logical_and(exp==10, psnm32)
+        ## (((__experiment__==7||__experiment__==8)&&psnm_27)||(__experiment__==10&&psnm_32))
+        #trig = np.logical_or(first,second)
+        #arr = sup.get_arrays( samp.upr, keys=['hie'])
+        #trig = arr['hie']==1
+        thn = sup.get_thn() ## NO TRIG SELECTION FOR DATA!!!
+
+        #print(f"{samp.name}: I have to ignore the trigger selelction")
+    else:
+        #return
+        #sup.get_arrays
+        if "hie" in samp.weightString:
+            weight_string = samp.weightString.replace("* (hie)","")
+        else:
+            weight_string = samp.weightString
+        thn = sup.get_thn(weight=eval(weight_string))
+    return thn
 
 
 

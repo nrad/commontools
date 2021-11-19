@@ -148,19 +148,22 @@ class SparseUp():
         #upr  = upr if upr else self.upr
         
         col_base = f"{basename}_" if basename else basename
-        cols = upr.arrays([f"{col_base}{k}" for k in keys], outputtype=tuple)
-        #cols = upr.arrays([f"{col_base}{k}" for k in keys])
-        for k,c in zip(keys,cols):
+        col_names = [f"{col_base}{k}" for k in keys]
+        #cols = upr.arrays(col_names, outputtype=tuple)
+        cols = upr.arrays(col_names, library="np")
+        #for k,c in cols.items(): #lzip(keys,cols):
+        for k in col_names: #lzip(keys,cols):
+            c = cols[k]
             if type(idx) == type(None):
                 di[k]=c
             else:
                 #di[k]=c[idx.astype(int)]
-                if not idx.dtype in ( np.dtype('bool'), np.dtype('int') ):
-                    raise TypeError("index array (idx) has have dtype int or bool. but it was %s. You can use idx.astype('int' or 'bool')"%idx.dtype)
+                #if not idx.dtype in ( np.dtype('bool'), np.dtype('int') ):
+                #    raise TypeError("index array (idx) has have dtype int or bool. but it was %s. You can use idx.astype('int' or 'bool')"%idx.dtype)
                 di[k]=c[idx]
      
         self.di = di
-        return di
+        return self.di
 
 
     def get_thn(self, di=None, bins=None, weight=None, name=None):
