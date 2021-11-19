@@ -41,7 +41,7 @@ def Mmin( m,e,p,be):
 
 
 def getMmin(chain, p4_vars=p4_vars,  boost=False):
-    a1 = sumP4s(get3prongP4s(chain, p4_vars=p4_vars, ))
+    a1 = sumP4s(get3prongP4s(chain, p4_vars=p4_vars) )
     if boost:
         a1.Boost(boost)
     mmin = getMminFromP4(a1)
@@ -128,7 +128,56 @@ sf_dicts = {
   
   
 
+def scaleP4(p4, sf=1.0, mass=None):
+    """
+    scale Px,Py,Pz by sf
+    """
+    m = p4.M() if mass==None else mass
+    scaled_p4 = ROOT.TLorentzVector()
 
+    #vect = p4.Vect()
+    #scaled_vect = vect*sf
+    #e_corrected = math.sqrt(m*m+scaled_vect.Mag2())
+    #scaled_p4.SetPxPyPzE(scaled_vect.X(), scaled_vect.Y(), scaled_vect.Z(), e_corrected)
+    
+    scaled_p4.SetPx( p4.Px()*sf )
+    scaled_p4.SetPy( p4.Py()*sf )
+    scaled_p4.SetPz( p4.Pz()*sf )
+    scaled_p4.SetE( math.sqrt( m*m + scaled_p4.P()*scaled_p4.P() ) )
+
+    return scaled_p4
+
+
+
+def smearP4ByResol(p4, resol, rand=None, mass=None):
+    """
+    resol: in percent
+    the px,py,pz are scaled by the same scaling factor drawn from a normal distirbution
+        with mean at 1 and width=resol/100
+    The energy is recalculated to keep the mass constant.
+
+    """
+    rand = rand if rand else ROOT.TRandom()
+    smear_factor = (rand.Gaus(1, resol/100))
+    smeared_p4 = scaleP4(p4, sf=smear_factor, mass=mass)
+    return smeared_p4
+
+
+def smearPxPyPzByResol(p4, resol, rand=None, mass=None):
+    """
+    resol: in percent
+    same as smearP4ByResol, but x, y, z components are smeared independently
+    """
+    rand = rand if rand else ROOT.TRandom()
+
+    m = p4.M()
+    smeared_p4 = ROOT.TLorentzVector()
+    smeared_p4.SetPx( rand.Gaus(p4.Px(), p4.Px()*resol/100) )
+    smeared_p4.SetPy( rand.Gaus(p4.Py(), p4.Py()*resol/100) )
+    smeared_p4.SetPz( rand.Gaus(p4.Pz(), p4.Pz()*resol/100) )
+    smeared_p4.SetE( math.sqrt( m*m + smeared_p4.P()*smeared_p4.P() ) )
+
+    return smeared_p4
 
 
 def findCosThetaSF(p4, sf_dict=sf_dicts['proc12'], key='central'):
@@ -139,7 +188,6 @@ def findCosThetaSF(p4, sf_dict=sf_dicts['proc12'], key='central'):
     return False
 
 def applyMomentumSFonP4(p4, sf=1):
-    scale_fact = [sf]*3 + [1]
     p4_corrected = ROOT.TLorentzVector()
     m = p4.M() 
     vect = p4.Vect()
@@ -291,7 +339,6 @@ def get3prongInvMs(chain, p4_vars=p4_vars, mass=pion_mass):
     return (p12.M(), p23.M(), p13.M() )
 
 
-
 def getTrackP4s(chain, mode='3x1', p4_vars=p4_vars_CMS, mass=None, boostToCMS=False):
     if mode == '3x1':
         base_names = ['track_1prong_%s'] + ['track{iTrk}_3prong_%s'.format(iTrk=iTrk)  for iTrk in [1,2,3] ]
@@ -319,5 +366,58 @@ def sumP4s(p4s):
     for p4 in p4s:
         tot += p4
     return tot
+
+#########################################################################
+###
+###   Helper functions of the ms (MT2) variable
+### 
+########################################################################
+
+def getPmiss(chain):
+    pmiss_vars = ["missingMomentumOfEventCMS_%s"%p for p in["Px","Py","Pz"]] + ['missingEnergyOfEventCMS']
+    p4miss = ROOT.TLorentzVector()
+    p4miss.SetPxPyPzE(*[ getattr(chain, v) for v in pmiss_vars] )
+    return p4miss
+
+def m2base(p4, p3inv, minv_2=None):
+    minv_2 = minv_2 if minv_2!=None else ( (Eb-p4.E())**2 - p3inv.Mag2() )
+    E_inv = (Eb-p4.E())
+    #print(minv_2)
+    if minv_2 == 0 :
+        m2 = p4.M2() + 2*E_inv*( p4.E() - p4.Vect().Dot(p3inv*(1.0/p3inv.Mag())) )
+    else:
+        m2 = p4.M2() + minv_2 + 2*( p4.E()*E_inv - p4.Vect().Dot(p3inv) )
+        
+    return m2
+
+
+def ms2_func(p4_1prong, p4_3prong, p4_miss, pxy_inv, return_max=True ):
+    """
+        calculate ms2 by minimizing max( m2base(3prong), m2base(1prong) ) 
+        under the condition that pinv1 + pinv2 = pmiss
+    """
+    p3_miss = p4_miss.Vect()
+    
+    px_inv, py_inv = pxy_inv
+    
+    #print('inside', p3_miss.Mag(), p4_1prong.M(), p4_3prong.M())
+    
+    p3_inv  = ROOT.TVector3()
+    try:
+        pz_inv  = math.sqrt( (Eb-p4_3prong.E())**2 - px_inv*px_inv - py_inv*py_inv )
+    except ValueError as e:
+        #print(e)
+        return 9999 if return_max else (9999,9999)
+    p3_inv.SetXYZ(px_inv, py_inv, pz_inv)
+    p3_inv2 = p3_miss - p3_inv
+    
+    m2base_1prong = m2base(p4_1prong, p3_inv2)
+    m2base_3prong = m2base(p4_3prong, p3_inv, minv_2=0)
+    m2bases = (m2base_1prong, m2base_3prong)
+    if return_max:
+        return max(m2bases)
+    else:
+        return m2bases
+
 
 

@@ -24,7 +24,7 @@ cuts = {
        }
 
 new_sel = 'track1_3prong_pt>=0.6 && track2_3prong_pt>=0.2 && track3_3prong_pt>=0.1 && thrust>=0.87 && thrust<=0.97 && visibleEnergyOfEventCMS>=2.5 && visibleEnergyOfEventCMS<=9 && missingMomentumOfEventCMS_theta>=0.15 && missingMomentumOfEventCMS_theta<=2.9 && missingMomentumOfEventCMS>=0.05 && missingMomentumOfEventCMS<=3.5 &&  nPi0s_3prong<=0 && nPi0s_1prong<=1 && nPhotons_3prong<=0 && nPhotons_1prong<=0 && tau_3prong_invM_2e_min>=0.7 && tau_3prong_invM_2e_min<=1.5 && tau_3prong_invM_2e_max>=0.8 && tau_3prong_invM_2e_min<=1.5'
-
+new_sel_tight = 'nPi0s_3prong==0 && nPhotons_3prong == 0 && nPi0s_1prong<=1 && nPhotons_1prong == 0 && thrust>=0.87 && thrust<=0.97 && visibleEnergyOfEventCMS>=2.5 && visibleEnergyOfEventCMS<=9 && missingMomentumOfEventCMS_theta>=0.5 && missingMomentumOfEventCMS_theta<=2.7 && missingMomentumOfEventCMS>=0.05 && missingMomentumOfEventCMS<=3.5 && missingMass2OfEvent<=54 && missingMass2OfEvent>=0 && tau_3prong_invM_2e_min>=0.7 && tau_3prong_invM_2e_min<=1.5 && tau_3prong_invM_2e_max>=0.8 && tau_3prong_invM_2e_max<=1.5 && track1_3prong_pt>=0.6 && track2_3prong_pt>=0.2 && track3_3prong_pt>=0.1'
 cuts = {
                 'phase3_3pi' : 'thrust>0.9 && thrust<0.99 && nPi0s_3prong==0 && nPhotons_3prong == 0 && nPi0s_1prong<=1 && nPhotons_1prong == 0 && track1_3prong_EoverP<0.8 && track2_3prong_EoverP<0.8 && track3_3prong_EoverP<0.8 && track1_3prong_EoverP > 0 && track2_3prong_EoverP > 0 && track3_3prong_EoverP > 0 && track_1prong_EoverP > 0 && visibleEnergyOfEventCMS<10.2 && visibleEnergyOfEventCMS>2.5',
                 'track_EoP' : ' track1_3prong_EoverP > 0 && track2_3prong_EoverP > 0 && track3_3prong_EoverP > 0 && track_1prong_EoverP > 0',
@@ -37,15 +37,23 @@ cuts = {
                 'mmin_1p5' : 'Mmin>=1.5',
                 'ten_percent_mmin_1p7_1p85' : '(__event__%10==0) && Mmin>=1.7 && Mmin<=1.85',
 
-                ## new cuts without invM stuff... can't be applied since not in the tuples yet!
+                ## new cuts 
                 'new_sel'              :  new_sel,
                 'new_sel_mmin_1p5_2' : f'{new_sel} && Mmin>=1.5 && Mmin<=2',
+
+                'new_sel_tight' : new_sel_tight,
+                'new_sel_tight_mmin_1p6_1p95' : f'{new_sel_tight} && Mmin>=1.6 && Mmin<=95', 
+
+                'trigger'   : '(lml0||lml1||lml2||lml4||lml6||lml7||lml8||lml9||lml10)', 
+                'signal'    : '( (tauMinusMCMode==5 && tauMinusMCProng==3) || (tauPlusMCMode==5 && tauPlusMCProng==3) )', 
+
+                'signal_trigger': '((tauMinusMCMode==5 && tauMinusMCProng==3) || (tauPlusMCMode==5 && tauPlusMCProng==3)) && (lml0||lml1||lml2||lml4||lml6||lml7||lml8||lml9||lml10)', 
             }
 
 
 
 
-def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[], keep_branches=[], overwrite_output=False, tree_name='tau3x1', n_max=-1, new_vector_vars=[],   *args, **kwargs):
+def filter_module(infile, outfile, sequence, new_vars, cut='', preselectors=[], drop_branches=[], keep_branches=[], overwrite_output=False, tree_name='tau3x1', n_max=-1, new_vector_vars=[],   *args, **kwargs):
     """
             sequence should be a list of eventFuncs which takes the "event" structure as input
             attributes of event corresponding to the new variables can be set, as in:
@@ -60,7 +68,6 @@ def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[],
 
     print('processing:\n input:', infile, '\n output:', outfile)
 
-    startM = time.clock()
     startC = time.time()
     
     assert outfile.endswith(".root")
@@ -86,9 +93,13 @@ def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[],
          )
     print(strstr)
 
-    files = glob.glob(infile)
+    
+
+    files = infile if isinstance(infile, (list,tuple)) else glob.glob(infile)
+    #files = glob.glob(infile)
     input_tree = ROOT.TChain(tree_name)
     for f in files:
+        print("adding input file: %s"%f)
         input_tree.Add(f)
     if not len(files):
         sys.exit("Exiting: No files were found at: %s"%infile)
@@ -169,9 +180,13 @@ def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[],
     ROOT.gROOT.ProcessLine(strstr)
     event = ROOT.newvars_t()
     for v in new_vars:
-        new_tree.Branch(v, ROOT.AddressOf(event, v), f"{v}/D")
+        #new_tree.Branch(v, ROOT.AddressOf(event, v), f"{v}/D")
+        #print(v,ROOT.addressof(event,v))
+        #print( ROOT.AddressOf(getattr(event)))
+        new_tree.Branch(v, ROOT.addressof(event, v), f"{v}/D")
     for v, nMax in new_vector_vars:
-        new_tree.Branch(v, ROOT.AddressOf(event, v), f"{v}[{nMax}]/D")
+        #new_tree.Branch(v, ROOT.AddressOf(event, v), f"{v}[{nMax}]/D")
+        new_tree.Branch(v, ROOT.addressof(event, v), f"{v}[{nMax}]/D")
     
     
     if n_max > 0 and n_selected > n_max:
@@ -184,7 +199,18 @@ def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[],
     
         if(i%10000==0): print( i)
         input_tree.GetEntry(i)
-   
+  
+        ##preselectors
+        passed = True
+        for preselector in preselectors:
+            passed = preselector(input_tree, *args, **kwargs)
+            if not passed:
+                break
+        event.passed = float(passed)
+        #if not passed:
+        #    #print('   failed preselector')
+        #    continue
+
         for eventFunc in sequence:
             eventFunc(input_tree, event,*args, **kwargs) 
     
@@ -194,11 +220,10 @@ def filter_module(infile, outfile, sequence, new_vars, cut='', drop_branches=[],
     new_tree.Write()
     g.Close()
     
-    endM = time.clock()
     endC = time.time()
     
     print ("-"*20)
-    print ("machine:", (endM-startM), "wall clock:", (endC-startC))
+    print ("wall clock:", (endC-startC))
 
 
 
@@ -207,26 +232,35 @@ if __name__ == '__main__':
 
 
     import argparse
-    from SequenceFunctions import *    
+    #from SequenceFunctions import *    
+    import SequenceFunctions 
 
 
     #DEFAULT_DROP_BRANCHES = ["tau_", "track*", "tau_*"]
     #DEFAULT_KEEP_BRANCHES = ["track*prong_E", "track*prong_pt*", "track*prong_px*", "track*prong_py*", "track*prong_pz*", "track*prong_EoverP", "track*prong_pionID", "track*prong_mc*", "tau_*prong_conv*", "tau_*prong_invM*", "tau_*prong_M*", "track*prong_*CMS", "track*prong*charge"]
 
-    DEFAULT_DROP_BRANCHES = ["track*", "tau_*",]
-    DEFAULT_KEEP_BRANCHES = ["track*prong_E", "track*prong_pt*", "track*prong_px*", "track*prong_py*", "track*prong_pz*", "track*prong_EoverP", "track*prong_pionID", "track*prong_mc*"]
-    DEFAULT_KEEP_BRANCHES += ["tau_*prong_conv*", "tau_*prong_invM*", "tau_*prong_M*", "tau_*prong_p_CMS","tau_*prong_E_CMS", "invM*"]
 
-    branch_list_for_fit = ['Mmin', 'nPhotons_1prong', 'track2_3prong_pt', 'nPi0s_1prong', 'tauPlusMCMode', 'track3_3prong_pt', 'invM_2e_min', 'nPhotons_3prong', 'tauMinusMCProng', 'visibleEnergyOfEventCMS', 'nPi0s_3prong', 'tauMinusMCMode', 'invM_2e_max', 'track1_3prong_pt', 'missingMomentumOfEventCMS', 'thrust', 'tauPlusMCProng', 'missingMomentumOfEventCMS_theta', 'lml*', 'ff*', ]
-    branch_list_for_fit += ["track*_3prong_mcPX", "track*_3prong_mcPY", "track*_3prong_mcPZ", "track*_3prong_mcE"]
-    DEFAULT_KEEP_BRANCHES = branch_list_for_fit
+    DEFAULT_DROP_BRANCHES = ["track*", "tau_*",]
+    #DEFAULT_KEEP_BRANCHES = ["track*prong_E", "track*prong_pt*", "track*prong_px*", "track*prong_py*", "track*prong_pz*", "track*prong_EoverP", "track*prong_pionID", "track*prong_mc*"]
+    DEFAULT_KEEP_BRANCHES = ["track*prong_E", "track*prong_pt*", "track*prong_px*", "track*prong_py*", "track*prong_pz*", "track*prong_EoverP", "track*prong_mc*"]
+    DEFAULT_KEEP_BRANCHES += ["tau_*prong_conv*", "tau_*prong_invM*", "tau_*prong_M*", "tau_*prong_p_CMS","tau_*prong_E_CMS", "invM*"]
+    DEFAULT_KEEP_BRANCHES += ["photonE_3prong", "photonECMS_3prong", "photonE_1prong", "photonECMS_1prong"]
+
+    # for super skimmed tuples:
     DEFAULT_DROP_BRANCHES = ["*"]
+    branch_list_for_fit  = ['Mmin', 'nPhotons_1prong', 'track2_3prong_pt', 'nPi0s_1prong', 'tauPlusMCMode', 'track3_3prong_pt', 'nPhotons_3prong', 'tauMinusMCProng', 'visibleEnergyOfEventCMS', 'nPi0s_3prong', 'tauMinusMCMode', 'track1_3prong_pt', 'missingMomentumOfEventCMS', 'thrust', 'tauPlusMCProng', 'missingMomentumOfEventCMS_theta', 'missingMass2OfEvent', 'lml*', 'ff*' ,'hie']
+    branch_list_for_fit += ["track*_3prong_mcPX", "track*_3prong_mcPY", "track*_3prong_mcPZ", "track*_3prong_mcE"]
+    branch_list_for_fit += ["track*prong_E", "track*prong_pt*", "track*prong_px*", "track*prong_py*", "track*prong_pz*","track*prong_p", "track*prong_p_CMS" ]
+    branch_list_for_fit += ["tau_3prong_invM_2e_min", "tau_3prong_invM_2e_max"]
+    branch_list_for_fit += ["tau_3prong_M", "tau_3prong_p"] 
+    branch_list_for_fit += ["track*_*prong_p*_CMS", "track*_*prong_E_CMS" ]
+    DEFAULT_KEEP_BRANCHES = branch_list_for_fit
 
 
     parser = argparse.ArgumentParser()
     #parser.add_argument("infile")
     #parser.add_argument("outfile")
-    parser.add_argument("--input", default=[])
+    parser.add_argument("--input", default=[], nargs="+")
     parser.add_argument("--output")
     parser.add_argument("--tree_name", default="tau3x1")
     parser.add_argument("--cut", default='')
@@ -234,6 +268,8 @@ if __name__ == '__main__':
     parser.add_argument("--overwrite", default=False, action='store_true')
     parser.add_argument("--drop_branches", default=DEFAULT_DROP_BRANCHES, nargs="+", )
     parser.add_argument("--keep_branches", default=DEFAULT_KEEP_BRANCHES, nargs="+", )
+    parser.add_argument("--extra_sequences", default=[], nargs="+", )
+    parser.add_argument("--event_list", default="")
 
     args = parser.parse_args()
 
@@ -243,12 +279,23 @@ if __name__ == '__main__':
     overwrite_output = args.overwrite
     drop_branches    = args.drop_branches
     keep_branches    = args.keep_branches
+    extra_sequences  = args.extra_sequences
+    event_list = args.event_list
     cut   = args.cut
     n_max = args.n
+    #mMinSmeared
+    sequence = [SequenceFunctions.tracksInvM, SequenceFunctions.mMin]
+    #sequence = []
 
+    seq_new_vars = {
+                     #'mMinSmearedReco':  ['m_min_0p001', 'm_min_0p005', 'm_min_0p01', 'm_min_0p02', 'm_min_0p03', 'm_min_0p04', 'm_min_0p05', 'm_min_0p06', 'm_min_0p07', 'm_min_0p08', 'm_min_0p09', 'm_min_0p1', 'm_min_0p2', 'm_min_0p3', 'm_min_0p4', 'm_min_0p5', 'm_min_0p6', 'm_min_0p7', 'm_min_0p8', 'm_min_0p9', 'm_min_1p0', 'm_min_2', 'm_min_5', 'm_min_10', 'm_min_20', 'm_min_50', 'm_min_100'],
+                     'mMinSmearedReco': ['m_min_0p1', 'm_min_0p15', 'm_min_0p2', 'm_min_0p25', 'm_min_0p3', 'm_min_0p35', 'm_min_0p4', 'm_min_0p45', 'm_min_0p5', 'm_min_0p55', 'm_min_0p6', 'm_min_0p65', 'm_min_0p7', 'm_min_0p75', 'm_min_0p8', 'm_min_0p85', 'm_min_0p9', 'm_min_0p95', 'm_min_1p0'], 
+                     'mMinSmeared'    : ['m_min_mc_0p001', 'm_min_mc_0p005', 'm_min_mc_0p1', 'm_min_mc_0p2', 'm_min_mc_0p3', 'm_min_mc_0p4', 'm_min_mc_0p5', 'm_min_mc_0p6', 'm_min_mc_0p7', 'm_min_mc_0p8', 'm_min_mc_0p9', 'm_min_mc_1', 'm_min_mc_1p5', 'm_min_mc_2'],
+                     'ms2' : ["inv_px", "inv_py", "inv_pz", "ms2", "ms", "ms2_1prong", "ms2_3prong" ]
+                   }
 
-    sequence = [tracksInvM, mMin]
     new_vars = [
+                'passed',
                 #'mmin2', 'mmin2_imag', 'mmin2_mag',
                 #'mmax2', 'mmax2_imag', 'mmax2_mag',
                 #'physical',   'IS_SIGNAL', 'IS_BKG', "IS_DATA",  'disc', 'coef_1', 'coef_2', 'coef_3',
@@ -267,6 +314,26 @@ if __name__ == '__main__':
     ]
 
 
+
+    for extra_seq in extra_sequences:
+        seq = getattr(SequenceFunctions, extra_seq)
+        sequence.append(seq)
+        new_vars +=  seq_new_vars.get(extra_seq, []) 
+
+
+    preselectors = []
+
+    if event_list:
+        from Preselectors import eListSelector
+        import pandas
+        from functools import partial
+        elist_df = pandas.read_csv(event_list)
+        eListSelectorWrapper = partial(eListSelector, elist_df=elist_df)
+        preselectors += [eListSelectorWrapper]
+
+    #new_vars += ['m_min_0p001', 'm_min_0p01',  'm_min_0p05', 'm_min_0p1', 'm_min_0p2', 'm_min_0p5', 'm_min_1', 'm_min_10']
+    #new_vars += ['m_min_0', 'm_min_0p01', 'm_min_0p05', 'm_min_0p1', 'm_min_0p5', 'm_min_1', 'm_min_5', 'm_min_10', 'm_min_15', 'm_min_20', 'm_min_100']
+    #new_vars += ['m_min_0p001', 'm_min_0p005', 'm_min_0p01', 'm_min_0p02', 'm_min_0p03', 'm_min_0p04', 'm_min_0p05', 'm_min_0p06', 'm_min_0p07', 'm_min_0p08', 'm_min_0p09', 'm_min_0p1', 'm_min_0p2', 'm_min_0p3', 'm_min_0p4', 'm_min_0p5', 'm_min_0p6', 'm_min_0p7', 'm_min_0p8', 'm_min_0p9', 'm_min_1p0', 'm_min_2', 'm_min_5', 'm_min_10', 'm_min_20', 'm_min_50', 'm_min_100']
     new_vector_vars = []
 
-    filter_module(infile, outfile, sequence, new_vars, cut, drop_branches=drop_branches, keep_branches=keep_branches, overwrite_output=overwrite_output, tree_name=args.tree_name, n_max=n_max , new_vector_vars=new_vector_vars   )
+    filter_module(infile, outfile, sequence, new_vars, cut, preselectors=preselectors, drop_branches=drop_branches, keep_branches=keep_branches, overwrite_output=overwrite_output, tree_name=args.tree_name, n_max=n_max , new_vector_vars=new_vector_vars   )
