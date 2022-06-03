@@ -88,8 +88,22 @@ namespace tolcols {
         kTLigPink        = 9031,
         kTLigPaleGrey    = 9032,
 
+        // Diverging 
+        kTDiv5 = 9050,
+        kTDiv4 = 9049,
+        kTDiv3 = 9048,
+        kTDiv2 = 9047,
+        kTDiv1 = 9046,
+        kTDiv0 = 9045,
+        kTDivm1 = 9044,
+        kTDivm2 = 9043,
+        kTDivm3 = 9042,
+        kTDivm4 = 9041,
+        kTDivm5 = 9040,
+
+
         // To label "bad" data (see BuRd and PRGn palettes below)
-        kTBadData        = 9033
+        kTBadData        = 9999
     };
 
     /* init()
@@ -139,6 +153,20 @@ namespace tolcols {
         new TColor(kTLigOrange,      238./255, 136./255, 102./255, "tol-lig-orange"     );
         new TColor(kTLigPink,        255./255, 170./255, 187./255, "tol-lig-pink"       );
         new TColor(kTLigPaleGrey,    221./255, 221./255, 221./255, "tol-lig-palegrey"   );
+
+
+        new TColor(kTDiv5,    103/255., 0/255., 31/255., "div-col" );
+        new TColor(kTDiv4,    178/255., 24/255., 43/255., "div-col" );
+        new TColor(kTDiv3,    214/255., 96/255., 77/255., "div-col" );
+        new TColor(kTDiv2,    244/255., 165/255., 130/255., "div-col" );
+        new TColor(kTDiv1,    253/255., 219/255., 199/255., "div-col" );
+        new TColor(kTDiv0,    247/255., 247/255., 247/255., "div-col" );
+        new TColor(kTDivm1,    209/255., 229/255., 240/255., "div-col" );
+        new TColor(kTDivm2,    146/255., 197/255., 222/255., "div-col" );
+        new TColor(kTDivm3,    67/255., 147/255., 195/255., "div-col" );
+        new TColor(kTDivm4,    33/255., 102/255., 172/255., "div-col" );
+        new TColor(kTDivm5,    5/255., 48/255., 97/255., "div-col" );
+
 
         new TColor(kTBadData,        255./255, 238./255, 153./255, "tol-bad-data"       );
     }

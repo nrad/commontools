@@ -5,10 +5,16 @@ import time
 import uuid
 import os
 import math
+import glob
+import shutil
+import getpass
+
 
 from PythonTools.NavidTools import uniqueName, hashString, hashObj
 ROOT.TH1.SetDefaultSumw2()
 
+user = getpass.getuser()
+user_init = user[0]
 
 ###################################
 #      
@@ -29,47 +35,124 @@ def getVariablesFromString(var):
 #      
 ###################################
 
+def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "(1)", binningIsExplicit=False ,addOverFlowBin='',variableBinning=False , name=None, nEvents=None):
+    """
+                From HEPHYPythonTools!
+                author unknown (probably Robert Schoefbeck)
+    """
+    hname_tmp = uniqueName("h_tmp")
 
-def getPlotFromChain(c, var, binning, cutString = "(1)", weight = "(1)", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None):
-  """
-        From HEPHYPythonTools!
-        author unknown (probably Robert Schoefbeck)
-  """
-  hname_tmp = uniqueName("h_tmp")
+    ndims = var.count(":")+1
+    if ndims>3:
+        raise NotImplemented("Trying to plot variable %s which has %s dimensions... but now only up to 3D is implemented... look into ThnSparse maybe?"%(var, ndims))
+    TH = getattr(ROOT, "TH%sD"%ndims)
 
-  if binningIsExplicit:
-    h = ROOT.TH1D(hname_tmp, hname_tmp, len(binning)-1, array('d', binning))
-#    h.SetBins(len(binning), array('d', binning))
-  else:
-    if len(binning)==6:
-      h = ROOT.TH2D(hname_tmp, hname_tmp, *binning)
-    elif len(binning)==3:
-      h = ROOT.TH1D(hname_tmp, hname_tmp, *binning)
-    elif len(binning)==9:
-      h = ROOT.TH3D(hname_tmp, hname_tmp, *binning)
+    if binningIsExplicit:
+        from array import array
+        if ndims==1:
+            h = TH(hname_tmp, hname_tmp, 
+                   len(binning)-1, array('d', binning))
+        elif ndims==2:
+            h = TH(hname_tmp, hname_tmp, 
+                   len(binning[1])-1, array('d', binning[1]),
+                   len(binning[0])-1, array('d', binning[0]))
+        elif ndims==1:
+            h = TH(hname_tmp, hname_tmp, 
+                   len(binning[2])-1, array('d', binning[2]),
+                   len(binning[1])-1, array('d', binning[1]),
+                   len(binning[0])-1, array('d', binning[0]))
+#        h.SetBins(len(binning), array('d', binning))
     else:
-      raise ValueError("Can't make sense of the bins! %s"%binning)
-  nEventsArgs = (nEvents,0) if nEvents else () 
-  #c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
-  c.Draw(var+">>%s"%hname_tmp, "(%s)*(%s)"%(cutString, weight), 'goff', *nEventsArgs)
+        if len(binning) in [3,6,9]:
+            h = TH(hname_tmp, hname_tmp, *binning)
+        else:
+            raise ValueError("Can't make sense of the bins! %s"%binning)
+    nEventsArgs = (nEvents,0) if nEvents else ()
+    #c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
+    c.Draw(var+">>%s"%hname_tmp, "(%s)*(%s)"%(cutString, weight), 'goff', *nEventsArgs)
 
-  if variableBinning[0]:
-    h.Sumw2()
-    h.Scale(variableBinning[1],"width")
+    if variableBinning != False:
+        h.Sumw2()
+        h.Scale(variableBinning,"width")
 
-  res = h.Clone(name) if name else h.Clone()
-  h.Delete()
-  del h
+    res = h.Clone(name) if name else h.Clone()
+    h.Delete()
+    del h
 
-  if addOverFlowBin.lower() == "upper" or addOverFlowBin.lower() == "both":
-    nbins = res.GetNbinsX()
-#    print "Adding", res.GetBinContent(nbins + 1), res.GetBinError(nbins + 1)
-    res.SetBinContent(nbins , res.GetBinContent(nbins) + res.GetBinContent(nbins + 1))
-    res.SetBinError(nbins , math.sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
-  if addOverFlowBin.lower() == "lower" or addOverFlowBin.lower() == "both":
-    res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
-    res.SetBinError(1 , math.sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
-  return res
+    if addOverFlowBin.lower() == "upper" or addOverFlowBin.lower() == "both":
+        nbins = res.GetNbinsX()
+#        print "Adding", res.GetBinContent(nbins + 1), res.GetBinError(nbins + 1)
+        res.SetBinContent(nbins , res.GetBinContent(nbins) + res.GetBinContent(nbins + 1))
+        res.SetBinError(nbins , math.sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
+    if addOverFlowBin.lower() == "lower" or addOverFlowBin.lower() == "both":
+        res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
+        res.SetBinError(1 , math.sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
+    return res
+
+
+def getPlotFromChainOLD(c, var, binning, cutString = "(1)", weight = "(1)", binningIsExplicit=False ,addOverFlowBin='',variableBinning=(False, 1) , name=None, nEvents=None):
+    """
+                From HEPHYPythonTools!
+                author unknown (probably Robert Schoefbeck)
+    """
+    hname_tmp = uniqueName("h_tmp")
+    
+    ndims = var.count(":")+1
+    if ndims>3:
+        raise NotImplemented("Trying to plot variable %s which has %s dimensions... but now only up to 3D is implemented... look into ThnSparse maybe?"%(var, ndims))
+    TH = getattr(ROOT, "TH%s"%ndims)
+
+    if binningIsExplicit:
+        if ndims==1:
+            h = TH(hname_tmp, hname_tmp, len(binning)-1, array('d', binning))
+        if ndims==2:
+            h
+#        h.SetBins(len(binning), array('d', binning))
+    else:
+        if len(binning)==6:
+            h = TH(hname_tmp, hname_tmp, *binning)
+        elif len(binning)==3:
+            h = TH(hname_tmp, hname_tmp, *binning)
+        elif len(binning)==9:
+            h = TH(hname_tmp, hname_tmp, *binning)
+        else:
+            raise ValueError("Can't make sense of the bins! %s"%binning)
+    nEventsArgs = (nEvents,0) if nEvents else () 
+    #c.Draw(var+">>%s"%hname_tmp, weight+"*("+cutString+")", 'goff', *nEventsArgs)
+    c.Draw(var+">>%s"%hname_tmp, "(%s)*(%s)"%(cutString, weight), 'goff', *nEventsArgs)
+
+    if variableBinning[0]:
+        h.Sumw2()
+        h.Scale(variableBinning[1],"width")
+
+    res = h.Clone(name) if name else h.Clone()
+    h.Delete()
+    del h
+
+    if addOverFlowBin.lower() == "upper" or addOverFlowBin.lower() == "both":
+        nbins = res.GetNbinsX()
+#        print "Adding", res.GetBinContent(nbins + 1), res.GetBinError(nbins + 1)
+        res.SetBinContent(nbins , res.GetBinContent(nbins) + res.GetBinContent(nbins + 1))
+        res.SetBinError(nbins , math.sqrt(res.GetBinError(nbins)**2 + res.GetBinError(nbins + 1)**2))
+    if addOverFlowBin.lower() == "lower" or addOverFlowBin.lower() == "both":
+        res.SetBinContent(1 , res.GetBinContent(0) + res.GetBinContent(1))
+        res.SetBinError(1 , math.sqrt(res.GetBinError(0)**2 + res.GetBinError(1)**2))
+    return res
+
+def getChain(files, tree_name='tau3x1'):
+    """
+        gets TChain named "tree_name" from from files
+        files can be a list of files, or str with file patern 
+    """
+    chain = ROOT.TChain(tree_name)
+    
+    if isinstance(files,str):
+        files = glob.glob(files)
+    if not len(files):
+        print("Warning no files empty! %s"%files)
+    for f in files:
+        chain.Add(f)
+    return chain
 
 
 
@@ -174,9 +257,12 @@ def getRDFHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None)
     weight = str(weight) if weight else weight
     kwargs['cut']    = sample.combineWithSampleSelection( cut )   if  kwargs.pop("combineWithSampleSelection", True) else cut 
     kwargs["weight"] = sample.combineWithSampleWeight( weight )   if  kwargs.pop("combineWithSampleWeight", True) else weight
+    kwargs["title"]  = kwargs.get("title", sample.name)
+    #print('getting histo from rdf', sample.name, args, kwargs)
     histo = getHistoFromRDF(sample.rdf, *args, **kwargs)
-    histo.cut = kwargs['cut']
+    histo.cut    = kwargs['cut']
     histo.weight = kwargs['weight']
+    #print('                  ....... done')
     return histo
      
 def getHistoFromSample(sample, *args, **kwargs): #, xtitle=None, ytitle=None):
@@ -335,6 +421,28 @@ def th1Func(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
         newhist.SetBinContent(x,newbc)
     return newhist
 
+def th1FuncError(hist, func = lambda x,y,bc: bc, ignoreZeros=True):
+    """
+        same as th1Func but includes errors
+        Returns a new histogram after applying func(xbin,ybin,bincontent) to each bin of hist.
+        if ignoreZeros is true, the new hist will not be filled if round(bincontent,10)==0
+        Useful to perform operations on multiple Histograms:
+        new_hist = th2Func(h1, func= lambda x,y,bc : h1.GetBinContent(x,y) + 0.5 h2.GetBinContent(x,y) )
+        BUT YOU should make sure they  have the same binnings otherwise the result would be nonsense.
+    """
+    from uncertainties import ufloat
+    newhist = hist.Clone()
+    newhist.Reset()
+    nx = hist.GetNbinsX()
+    for x in range(nx+1):
+        bc = ufloat(hist.GetBinContent(x),hist.GetBinError(x))
+        newbc = func(x,bc)
+        if ignoreZeros and round(getVal(newbc, strict=False),10)==0 and round(getSigma(newbc, strict=False),10)==0:
+            continue 
+        newhist.SetBinContent(x,getVal(newbc, strict=False) )
+        newhist.SetBinError(x, getSigma(newbc, strict=False, def_val=0))
+    return newhist
+
 def getTH2FbinContent(hist , legFunc= lambda x,y : (x,y), getError=False, ignoreZeros=True, binContentFunc=None):
     """
        returns a bin content as a dicitonary of dictionaries.
@@ -381,17 +489,48 @@ def getTH2dist(th2d,*binning):
         h.Fill(x)
     return h
 
+def getTF1Params(f, errors=True, di=True):
+
+    """
+        returns a dictionary or list with the parameter values of the function
+    """
+
+    nPars = f.GetNpar()
+    if errors:
+        from uncertainties import ufloat
+        vals =  [ufloat(f.GetParameter(i), f.GetParError(i)) for i in range(nPars)]
+    else:
+        vals = [f.GetParameter(i) for i in range(nPars)]
+    if di:
+        names = [f.GetParName(i) for i in range(nPars)]
+        vals  = dict(zip(names, vals))
+    return vals
 
 
+
+def copyIndexPHP(directory):
+    ''' Copy index.php to directory
+    '''
+    index_php_to = os.path.join( directory, 'index.php' )
+    os.makedirs(directory, exist_ok=True) 
+    index_php = f'/afs/desy.de/user/{user_init}/{user}/www/index.php'
+    if not os.path.isfile(index_php):
+        raise Exception("unable to find the original PHP file...what have you done with it?!! %s"%index_php)
+    try:
+        shutil.copyfile( index_php, index_php_to )
+    except Exception as exp:
+        print("Failed to copy index.php... looked for it in:\n%s \ntried to copy it to:%s\n"%(index_php,index_php_to))
+        raise exp
 
 #def saveCanvas(canv,dir="./",name="",formats=["pdf","png"], extraFormats=["C","root"] , make_dir=True):
-def saveCanvas(canv,dir="./",name="",formats=["png"], extraFormats=[] , make_dir=True, showWebLink=False):
+def saveCanvas(canv, dir="./",name="", formats=["png"], extraFormats=[] , make_dir=True, showWebLink=False, copyPHP=True):
     if "$" in dir: 
         dir = os.path.expandvars(dir)
         if "$" in dir:
             raise Exception("Unresolved environmental variables! %s"%dir)
     if not os.path.isdir(dir) and make_dir:
         makeDir(dir)
+    copyIndexPHP(dir)
     if type(formats)!=type([]):
         formats = [formats]
     for form in formats:
@@ -402,7 +541,7 @@ def saveCanvas(canv,dir="./",name="",formats=["png"], extraFormats=[] , make_dir
         for form in extraFormats:
             canv.SaveAs(extraDir+"/%s.%s"%(name,form) )
     if showWebLink and 'www' in dir:
-        print( 'https://www.desy.de/~nrad/' + dir.split('www')[-1] )
+        print( f'https://www.desy.de/~{user}/' + dir.split('www')[-1] + ("/index.php" if copyPHP else "") )
 
 def drawLatex( txt = '', x=0.4, y=0.9,  font=22, size=0.04 , align=11, angle=0, setNDC=True):
     latex = ROOT.TLatex()
@@ -626,7 +765,7 @@ def drawRatioPlot(  topPadObjects,
     topPadObjects = topPadObjects if isinstance(topPadObjects, (list,tuple)) else [topPadObjects]
     
     #y_title_offset = 2
-    default_widths = {'y_width':500, 'x_width':500, 'y_ratio_width':200}
+    default_widths = {'x_width':1000, 'y_width':400, 'y_ratio_width':400}
     default_widths.update( widths )
     #y_border = default_widths['y_ratio_width']/float( default_widths['y_width'] )
     #default_widths['y_width'] += default_widths['y_ratio_width']

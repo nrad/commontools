@@ -3,6 +3,7 @@ from PythonTools.ROOTHelpers import drawRatioPlot
 from PythonTools.Legend import fixLegend
 from PythonTools.standard import drawLatex, getAndSetEList, getHistoFromSample, saveCanvas, th1Func, th2Func
 from PythonTools.StatHelpers import *
+from PythonTools.NavidTools import uniqueName
 
 import os
 import ROOT
@@ -28,45 +29,47 @@ import math
 
 
 
-def getStackFromHists(histList,sName=None,scale=None, normalize=False, transparency=False):
-  #print "::::::::::::::::::::::::::::::::::::::::::: Getting stack" , sNam
-  if not sName:
-    from PythonTools.NavidTools import uniqueName
-    #sName = "stack_%s"%uniqueHash()
-    sName = uniqueName("stack_")
-  stk=ROOT.THStack(sName,sName)
-
-  if transparency:
-    alphaBase=0.80
-    alphaDiff=0.70
-    alphas=[alphaBase-i*alphaDiff/len(histList) for i in range(len(histList)) ]
-    #print alphas
-    #print histList
-
-  for i, hist in enumerate(histList):
-    #h = hist.Clone()
-    h = hist
-
-    #  h.ClearUnderflowAndOverflow()  remove for efficiecy plots
-    if scale:
-      print ("    Scaling: ", sName if sName else [ hist.GetName(), hist.GetTitle() ])
-      h.Scale(scale)
-    if normalize:
-      if h.Integral():
-        h.Scale(1/h.Integral()) 
-      else:
-        print("Histogram Integral is zero, can't normalize",  sName if sName else [ hist.GetName(), hist.GetTitle()]) 
+def getStackFromHists(histList,sName=None,scale=None, normalize=False, transparency=False, fixLabels=False):
+    #print "::::::::::::::::::::::::::::::::::::::::::: Getting stack" , sNam
+    if not sName:
+        from PythonTools.NavidTools import uniqueName
+        #sName = "stack_%s"%uniqueHash()
+        sName = uniqueName("stack_")
+    stk=ROOT.THStack(sName,sName)
     if transparency:
-      h.SetFillColorAlpha(h.GetFillColor(), alphas[i])
-    stk.Add(h)
-  return stk
+        alphaBase=0.80
+        alphaDiff=0.70
+        alphas=[alphaBase-i*alphaDiff/len(histList) for i in range(len(histList)) ]
+        #print alphas
+        #print histList
+
+    for i, hist in enumerate(histList):
+        #h = hist.Clone()
+        h = hist
+
+        #    h.ClearUnderflowAndOverflow()    remove for efficiecy plots
+        if scale:
+            print ("        Scaling: ", sName if sName else [ hist.GetName(), hist.GetTitle() ])
+            h.Scale(scale)
+        if normalize:
+            if h.Integral():
+                h.Scale(1/h.Integral()) 
+            else:
+                print("Histogram Integral is zero, can't normalize",    sName if sName else [ hist.GetName(), hist.GetTitle()]) 
+        if transparency:
+            h.SetFillColorAlpha(h.GetFillColor(), alphas[i])
+        stk.Add(h)
+    if fixLabels and histList:
+        stk.Draw("goff")
+        fixHistoStyle(stk, x_title=histList[0].GetXaxis().GetTitle(), y_title=histList[0].GetYaxis().GetTitle())
+    return stk
 
 
 def getStackTot(stack):
     mc_hist = stack.GetHists().Last().Clone(stack.GetName()+"_tot_"  )
     mc_hist.Reset()
     mc_hist.Merge( stack.GetHists() )
-    mc_hist.SetDirectory(0)
+    #mc_hist.SetDirectory(0)
     return mc_hist
 
 
@@ -79,8 +82,12 @@ def getStackTot(stack):
 
 
 def addHists(histList, name=None, title=None):
-    stack = getStackFromHists(histList)
-    hist_tot = getStackTot(stack)
+    #stack = getStackFromHists(histList)
+    #hist_tot = getStackTot(stack)
+    hist_tot = histList[0].Clone(uniqueName("total"))
+    hist_tot.Reset()
+    for h_ in histList:
+        hist_tot.Add(h_)
     if name:
         hist_tot.SetName(name)
     if title:
@@ -188,6 +195,31 @@ def getFullWidthWrtMedian(hist, pr=0.68, med_prob = 0.5):
     #return abs((abs(q[2]) - abs(q[1]))/2.0)
     return q[2]-q[1]
 
+def getBootstrappedFunc(hist, func, N=1000, uf=True, **kwargs):
+
+    #import numpy as np
+    new = hist.Clone()
+    entries = hist.GetEntries()
+    if entries:
+        vals = []
+        for i in range(N):
+            new.Reset()
+            new.FillRandom(hist, int(entries))
+
+            val = func(new, **kwargs)
+            vals.append( val )
+        
+        new.Delete()
+        res = (np.mean(vals), np.std(vals))
+    else:
+        res = (0,0)
+    if uf:
+        from uncertainties import ufloat
+        return ufloat( *res  )
+    else:
+        return res
+
+
 
 def getConfidenceInterval(hist, p=0.68, med_prob = 0.5, double_sided=True):
     """
@@ -221,6 +253,19 @@ def integrate(hist, x0, x1):
 
 def getBootstrappedQuantileError(hist, p=0.95, N=1000, uf=True):
     raise Exception("use getBootstrappedFullWidth")
+
+def integrateAndError(h, binx1=None, binx2=None, ndig=3, uf=True):
+    binx1 = binx1 if binx1!=None else 0
+    binx2 = binx2 if binx2!=None else h.GetNbinsX()
+    err=np.array([0.0])
+    #print(binx1, binx2)
+    integral = h.IntegralAndError(binx1, binx2, err)
+    ret = (integral, err[0])
+    if ndig:
+        ret = [round(x,ndig) for x in ret]
+    if uf:
+        ret = ufloat(*ret)
+    return ret
 
 def getBootstrappedFullWidth(hist, p=0.95, N=1000, half_width=False, uf=True):
 
@@ -407,10 +452,11 @@ def getFOMfromHists(sig_hist, bkg_hist, fomFunc=punziFOM, fomArgs={'z':1.96, 'nS
     return hfom_lt, hfom_gt
 
 
-def makeHistFromList(lst, bins=None,name ="Histo", func=None):
+def makeHistFromList(lst, bins=None, name=None, title="Histo", func=None):
     if not bins:
         bins = [len(lst),0,len(lst)]
-    h = ROOT.TH1F(name,name,*bins)
+    name = name if name else uniqueName("histo_")
+    h = ROOT.TH1F(name, title,*bins)
     for ib,l in enumerate(lst,1):
         if func:
             l = func(l)
@@ -425,14 +471,14 @@ def makeHistFromList(lst, bins=None,name ="Histo", func=None):
     return h
 
 
-def makeHistFromDict(di , bins=None, name="Histo", bin_order=None,func=None):
+def makeHistFromDict(di , bins=None, name=None, title="Histo", bin_order=None,func=None):
     if bin_order:
         lst   = [ di.get(x,0) for x in bin_order ]
         labels = bin_order #[ x for x in bin_order if x in di]
     else:
         lst    = di.values()
         labels = di.keys()
-    h = makeHistFromList(lst, bins, name, func)
+    h = makeHistFromList(lst, bins=bins, name=name, title=title, func=func)
     for ib, bin_label in enumerate(labels,1):
         h.GetXaxis().SetBinLabel( ib, str(bin_label))
     return h
@@ -724,19 +770,24 @@ def makeTGraphFromDF(df, x_col, y_col, title=None, x_title=None, y_title=None):
     xe = array( x.apply( lambda v: getSigma(v, strict=False, def_val=0)), dtype='float' )  
     ye = array( y.apply( lambda v: getSigma(v, strict=False, def_val=0)), dtype='float' )  
     withErrors = ( xe.any() or ye.any() ) # are all errors zero?
-    #print(nPoints, ye,xe,withErrors)
+    #print(nPoints, x,y)#ye,xe,withErrors)
 
     if withErrors:
         #print ( nPoints, array(x) , array(y.apply(lambda v: v.val)), xe, ye )
         #g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y.apply(lambda v: getVal(v)), dtype='float'), xe, ye )
-        g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y.apply(lambda v: getVal(v, strict=False)), dtype='float'), xe, ye )
+        g = ROOT.TGraphErrors( nPoints,  
+                              array(x.apply(lambda v: getVal(v, strict=False)), dtype='float'),
+                              array(y.apply(lambda v: getVal(v, strict=False)), dtype='float'), 
+                              xe, 
+                              ye)
     else:
         g = ROOT.TGraphErrors( nPoints, array(x,dtype='float') , array(y,dtype='float'))
     g.GetXaxis().SetTitle(x_title if x_title else x_col)
     g.GetYaxis().SetTitle(y_title if y_title else y_col)
     if title:
         g.SetTitle(title)
-    return g#,array(x), array(y.apply(lambda v: getVal(v))), xe,ye
+    return g
+
 
 
 
@@ -1248,7 +1299,9 @@ def getHistoEfficiency(h_den, h_num,
     passed_title = passed_title if passed_title else "Passed"
     h_den.SetTitle(total_title)
     h_num.SetTitle(passed_title)
-    
+   
+    #for h_ in [h_den, h_num]:
+    #    fixHistoStyle( 
     h_den.SetLineColor(ROOT.kRed)
     h_num.SetLineColor(ROOT.kBlue)
     h_den.SetLineWidth(2)
@@ -1316,9 +1369,9 @@ def getSampEfficiency(samp, plot, cut_common="(1)", weight_num="(1)", weight_den
                      ):
     #exec(open('/afs/desy.de/user/n/nrad/analysis/commontools/PythonTools/ROOTHelpers.py').read())
     #from PythonTools import getAndSetEList
-    getAndSetEList(samp.chain, cut_common, retrieve=True)
-    h_den = getHistoFromSample(samp, var=plot.var, binning=plot.bins, cutString=str(cut_common) , weight=weight_den ,  addOverFlowBin=plot.overflow, combineWithSampleWeight=False )
-    h_num = getHistoFromSample(samp, var=plot.var, binning=plot.bins, cutString=str(cut_common) , weight=weight_num ,  addOverFlowBin=plot.overflow, combineWithSampleWeight=False )
+    getAndSetEList(samp.chain, cut_common,  retrieve=True)
+    h_den = getHistoFromSample(samp, var=plot.var, binning=plot.bins, cutString=str(cut_common) , weight=weight_den ,  addOverFlowBin=plot.overflow, binningIsExplicit=plot.binningIsExplicit, variableBinning=plot.variableBinning, combineWithSampleWeight=False )
+    h_num = getHistoFromSample(samp, var=plot.var, binning=plot.bins, cutString=str(cut_common) , weight=weight_num ,  addOverFlowBin=plot.overflow, binningIsExplicit=plot.binningIsExplicit, variableBinning=plot.variableBinning, combineWithSampleWeight=False )
     samp.chain.SetEventList(0) ## reset eventlist
     h_den.Sumw2()
     h_num.Sumw2()
@@ -1328,8 +1381,9 @@ def getSampEfficiency(samp, plot, cut_common="(1)", weight_num="(1)", weight_den
     plot_name    = plot_name if plot_name else p.name
 
     for h in [h_den, h_num]:
-        h.GetXaxis().SetTitle(plot.xTitle)
-        h.GetYaxis().SetTitle("Events")
+        fixHistoStyle(h, x_title=plot.xTitle, y_title="Events")
+        #h.GetXaxis().SetTitle(plot.xTitle)
+        #h.GetYaxis().SetTitle("Events")
     ret = getHistoEfficiency(h_den, h_num, total_title=total_title, passed_title=passed_title, title=title, draw=draw, plot_name=plot_name)
     
     return ret
@@ -1341,6 +1395,7 @@ def getSampsEfficiency(samps, plot, cut_common="(1)", weight_num="(1)", weight_d
                       title=None,
                       plot_name=None,
                       combineWithSampleWeight=False,
+                      #sig_tags=None,
                      ):
     """
         gets the efficiency for all samples
@@ -1352,8 +1407,10 @@ def getSampsEfficiency(samps, plot, cut_common="(1)", weight_num="(1)", weight_d
     histos_den = samps.getHistos([plot], cut=str(cut_common), weight=weight_den, rdf=False, combineWithSampleWeight=combineWithSampleWeight)
     histos_num = samps.getHistos([plot], cut=str(cut_common), weight=weight_num, rdf=False, combineWithSampleWeight=combineWithSampleWeight)
 
-    hden = getSigBkgData(histos_den[plot.name])
-    hnum = getSigBkgData(histos_num[plot.name])
+    ### using getSigBkgData is dangerous.... hardcoded signal selection
+    
+    hden = getSigBkgData(histos_den[plot.name], sig_tags=samps._sig_list)
+    hnum = getSigBkgData(histos_num[plot.name], sig_tags=samps._sig_list)
     #hden_sig, hden_bkg, hden_data = getSigBkgData(histos_den[plot.name])
     #hnum_sig, hnum_bkg, hnum_data = getSigBkgData(histos_num[plot.name])
    
@@ -1371,8 +1428,9 @@ def getSampsEfficiency(samps, plot, cut_common="(1)", weight_num="(1)", weight_d
 
 
     for h in [hden_mc, hnum_mc, hden_data, hnum_data, hden_sig, hnum_sig]:
-        h.GetXaxis().SetTitle(plot.xTitle)
-        h.GetYaxis().SetTitle("Events")
+        fixHistoStyle(h, x_title=plot.xTitle, y_title="Events")
+        #h.GetXaxis().SetTitle(plot.xTitle)
+        #h.GetYaxis().SetTitle("Events")
         h.SetFillColor(0) 
     
     total_title  = total_title if total_title else weight_den
@@ -1389,15 +1447,20 @@ def getSampsEfficiency(samps, plot, cut_common="(1)", weight_num="(1)", weight_d
     return {'data':ret_data, 'mc':ret_mc, 'histos_den':histos_den, 'histos_num':histos_num, 'taupair':ret_sig}
 
 
-def getSigBkgData(hists, foms=False):
+#def getSigBkgData(hists, foms=False, sig_tags=['tau_3pi']):
+def getSigBkgData(hists, foms=False, sig_tags=None):
     """
         hists is a list of lists
         sig = hists[0][0]
         bkgs = hists[0][1:]
         data = hists[1][:]
     """
-    h_sig = hists[0][0]
-    h_bkgs = hists[0][1:]
+    if not sig_tags:
+        raise ValueError("<sig_tags> must be given! otherwise can't separate signal and background histograms!")
+    h_sigs = [h for h in hists[0] if any([sig_tag in h.GetName() for sig_tag in sig_tags]) ] 
+    h_sig = addTHns(h_sigs)
+    #h_sig = hists[0][0]
+    h_bkgs = [h for h in hists[0] if h not in h_sigs]
     h_bkg  = addTHns(h_bkgs)
     h_sig.SetTitle('Signal')
     h_bkg.SetTitle('Background')
@@ -1580,6 +1643,7 @@ def getCutStringFromDict(di):
 
 
 nSigAll = 769508.625 # n(tau pairs) for 8.8 /fb
+nSigPerInvfb = (0.919E6*2*(0.09)*(0.352+0.108+0.255))  # xsec * 2 * BR(tau-->a1-->3pinu) * BR(tau-->leptonic)*BR(tau-->Rho nu)* BR(tau-->pi nu) 
 def report(s_hist, b_hist, title="", n_sig_tot=nSigAll, verbose=True):
     
     s = s_hist.Integral()

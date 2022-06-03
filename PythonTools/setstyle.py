@@ -158,3 +158,65 @@ def setMyStyle():
   myStyle.SetHatchesSpacing(0.05)
 
   myStyle.cd()
+
+
+import ROOT
+
+def setExtraStyle():
+    ROOT.gStyle.SetPaintTextFormat("0.2f")
+    ROOT.gStyle.SetOptTitle(1)
+    ROOT.gStyle.SetTitleStyle(0)
+    ROOT.gStyle.SetTitleBorderSize(0)
+    ROOT.gStyle.SetTitleFont(42)
+    ROOT.gStyle.SetTitleFontSize(0.035)
+    ROOT.gStyle.SetTitleH(0)      # Set the height of the title box
+    ROOT.gStyle.SetTitleW(0)      # Set the width of the title box
+    ROOT.gStyle.SetTitleX(0.5)   # Set the position of the title box
+    ROOT.gStyle.SetTitleY(0.95) # Set the position of the title box
+    ROOT.gStyle.SetTitleAlign(11)
+    
+    ROOT.gStyle.SetPadTickX(0)
+    ROOT.gStyle.SetPadTickY(0)
+    
+    ROOT.gStyle.SetStatX(0.9)
+    ROOT.gStyle.SetStatY(0.92)
+    ROOT.gStyle.SetStatFontSize(30)
+    ROOT.gStyle.SetStatBorderSize(0)
+    ROOT.gStyle.SetStatFont(43)
+    ROOT.gStyle.SetStatH(0.2)
+    ROOT.gStyle.SetStatW(0.4)
+
+
+def setPalette(name='temp', ncontours=999):
+    """Set a color palette from a given RGB list
+    stops, red, green and blue should all be lists of the same length
+    see set_decent_colors for an example"""
+    from array import array
+    
+    palettes = {
+        'gray':{
+                'stops' : [0.00, 0.34, 0.61, 0.84, 1.00], 
+                'red'   : [1.00, 0.84, 0.61, 0.34, 0.00], 
+                'green' : [1.00, 0.84, 0.61, 0.34, 0.00], 
+                'blue'  : [1.00, 0.84, 0.61, 0.34, 0.00], 
+        },
+        'temp':{
+                'stops' : [0.00, 0.5,  1.00],
+                'red'   : [0.10, 1.00,   0.90], 
+                'green' : [0.70, 0.95,   0.30],
+                'blue'  : [0.90, 1.00,   0.10], 
+        },
+
+    }
+    palette=palettes[name]
+    
+    s = array('d', palette['stops'])
+    r = array('d', palette['red'])
+    g = array('d', palette['green'])
+    b = array('d', palette['blue'])
+
+    npoints = len(s)
+    ROOT.TColor.CreateGradientColorTable(npoints, s, r, g, b, ncontours)
+    ROOT.gStyle.SetNumberContours(ncontours)
+
+

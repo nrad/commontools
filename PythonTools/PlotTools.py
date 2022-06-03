@@ -10,6 +10,9 @@ class PlotVariable( param.Parameterized ):
     xTitle = param.String()
     yTitle = param.String()
     overflow = param.Selector( default="both", objects=["upper","lower","both", None, False, ""] )
+    binningIsExplicit = param.Boolean(default=False)
+    #variableBinning   = param.Boolean
+    variableBinning = param.Number(0) 
     cut    = param.String()
     logY   = param.Boolean(default=True)
     

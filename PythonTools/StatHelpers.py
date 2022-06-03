@@ -1,5 +1,5 @@
 from uncertainties import ufloat, ufloat_fromstr
-
+import numpy as np
 
 ########################################################################################################
 ###################     ufloat helpers

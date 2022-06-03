@@ -171,7 +171,7 @@ class SparseUp():
         bins = bins if bins else self.keys_bins 
         name = name if name else self.name
         thn = getTHnSparse(di, keys_bins=bins, weight=weight, name=name)
-        fix_up_thn(thn)
+        fixThn(thn)
         self.thn = thn
         return thn
 
@@ -199,14 +199,50 @@ def arrayIsNone(array):
 
 
 
-def fix_up_thn(thn):
-    axes_labels = dict( [ (i,x.GetTitle()) for i,x in enumerate( thn.GetListOfAxes() ) ] )
-    for iax, axname in axes_labels.items():
+def fixThn(thn):
+    axes_names = [ (i,x.GetName()) for i,x in enumerate( thn.GetListOfAxes() ) ] 
+    for iax, axname in axes_names:
         setattr(thn, axname, thn.GetAxis(iax) )
         setattr(thn, f"index_{axname}", iax)
-    setattr(thn, 'axes_labels', axes_labels )
-    setattr(thn, 'axes_idx',  {v:k for k,v in axes_labels.items() })
+    setattr(thn, 'axes_names', axes_names )
+    setattr(thn, 'axes_idx',  {v:k for k,v in axes_names })
+    #setattr(thn, 'axes_titles',  {v: for k,v in axes_names })
 
+
+
+def getThnProj(thn, x,y=None, name=None):
+    title = thn.GetAxis(getattr(thn,"index_%s"%x)).GetTitle()
+    title = title if title else thn.GetAxis(getattr(thn,"index_%s"%x)).GetName()
+    if not y:
+        proj = thn.Projection(getattr(thn,"index_%s"%x))
+        proj.GetXaxis().SetTitle(title)
+    else:
+        proj = thn.Projection(getattr(thn,"index_%s"%y), getattr(thn,"index_%s"%x))
+        title_y = thn.GetAxis(getattr(thn,"index_%s"%y)).GetTitle()
+        title_y = title_y if title_y else thn.GetAxis(getattr(thn,"index_%s"%y)).GetName()
+        title_x = title
+        title = f"{title_y}_vs_{title_x}"
+        proj.GetYaxis().SetTitle(title_y)
+    name  = name if name else f"{x}" + ("" if not y else f"_vs_{y}" )
+    proj.SetName(name)
+    proj.SetTitle(title)
+    #print(title_y, title_x)
+    return proj
+
+
+def setThnCutByBin(thn, ax, min_max=()):
+    getattr(thn,ax).SetRange(  *min_max )
+    return thn
+
+def setThnCutByVal(thn, ax, min_max=()):
+    raise NotImplementedError
+    getattr(thn,ax).SetRange(  *min_max )
+    return thn
+
+
+def resetThnCuts(thn):
+    for ax in thn.GetListOfAxes():
+        ax.SetRange(0,0)
 
 
 
